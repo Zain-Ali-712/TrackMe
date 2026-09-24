@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Subtle Canvas Base: #eef2f6 (Distinguishable from pure white cards) */
+    --background: 215 28% 95%;
+    /* 30% Deep Executive Slate */
+    --foreground: 222.2 47.4% 11.2%; /* #0f172a slate-900 */
+
+    --card: 0 0% 100%; /* Pure white cards #ffffff */
+    --card-foreground: 222.2 47.4% 11.2%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+
+    /* Primary: Deep Slate-900 (High-contrast, authority) */
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    /* 10-20% Lighter Theme Color: Slate-100 / Slate-50 */
+    --secondary: 210 40% 96.1%; /* #f1f5f9 slate-100 */
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%; /* #f1f5f9 */
+    --muted-foreground: 215.4 16.3% 46.9%; /* #64748b slate-500 */
+
+    /* 10% Accent: Electric Tech Cobalt (#2563eb) */
+    --accent: 221.2 83.2% 53.3%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Crisp borders: Slate-200 */
+    --border: 214.3 31.8% 91.4%; /* #e2e8f0 */
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+
+    --radius: 0.625rem;
+
+    /* Standard Tailwind Slate channels for 100% untouched light mode fidelity */
+    --color-slate-50: 248 250 252;
+    --color-slate-100: 241 245 249;
+    --color-slate-200: 226 232 240;
+    --color-slate-300: 203 213 225;
+    --color-slate-400: 148 163 184;
+    --color-slate-500: 100 116 139;
+    --color-slate-600: 71 85 105;
+    --color-slate-700: 51 65 85;
+    --color-slate-800: 30 41 59;
+    --color-slate-850: 23 32 51;
+    --color-slate-900: 15 23 42;
+    --color-slate-950: 2 6 23;
+
+    /* Executive Dual-Tone Slate Sidebar */
+    --sidebar-bg: #ffffff;
+    --sidebar-border: #e2e8f0;
+    --sidebar-from: #ffffff;
+    --sidebar-to: #f8fafc;
+  }
+
+  .dark {
+    /* Dual-Tone Executive Dark Slate & Contrasting Lighter Slate/Grey */
+    --color-slate-950: 10 16 28;     /* #0a101c - Deep authentic dark slate canvas */
+    --color-slate-900: 15 23 42;     /* #0f172a - The original signature executive dark slate for cards & panels */
+    --color-slate-850: 22 34 54;     /* #162236 - Elevated hover & intermediate card layers */
+    --color-slate-800: 30 43 64;     /* #1e2b40 - Contrasting lighter slate for sub-sections, table headers, tab bars */
+    --color-slate-700: 51 68 94;     /* #33445e - Defined slate-grey borders, active pills, table dividers */
+    --color-slate-600: 74 96 126;    /* #4a607e - Muted cool grey borders & icons */
+    --color-slate-500: 132 153 182;  /* #8499b6 - Muted text with high legibility */
+    --color-slate-400: 168 186 209;  /* #a8bad1 - Secondary text, subtitles & field labels */
+    --color-slate-300: 206 218 233;  /* #cedae9 - Primary body text & icons */
+    --color-slate-200: 226 235 245;  /* #e2ebf5 - High-contrast text & badges */
+    --color-slate-100: 241 246 251;  /* #f1f6fb - Brightest accents & active badges */
+    --color-slate-50:  248 250 253;  /* #f8fafd - Pure contrast highlights */
+
+    /* Canvas Background: Deep Executive Slate */
+    --background: 222 47% 7.5%; /* #0a101c */
+    --foreground: 214 32% 95%; /* #e2ebf5 */
+
+    /* Cards: Authentic Executive Dark Slate */
+    --card: 222.2 47.4% 11.2%; /* #0f172a */
+    --card-foreground: 214 32% 95%;
+
+    --popover: 222.2 47.4% 11.2%; /* #0f172a */
+    --popover-foreground: 214 32% 95%;
+
+    /* Primary: Crisp Light Slate in dark mode */
+    --primary: 214 32% 95%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    /* Secondary / Sub-sections: Contrasting Lighter Slate */
+    --secondary: 217 36% 18.5%; /* #1e2b40 */
+    --secondary-foreground: 214 32% 95%;
+
+    --muted: 217 36% 18.5%;
+    --muted-foreground: 215 25% 62%; /* #8499b6 */
+
+    /* 10% Accent in dark mode */
+    --accent: 217.2 91.2% 59.8%; /* #3b82f6 */
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Borders & Inputs: Crisp Contrasting Slate-Grey */
+    --border: 216 30% 28.5%; /* #33445e */
+    --input: 216 30% 28.5%;
+    --ring: 217.2 91.2% 59.8%;
+
+    /* Executive Dark Sidebar */
+    --sidebar-bg: #0c1220;
+    --sidebar-border: #1a2638;
+    --sidebar-from: #0c1220;
+    --sidebar-to: #0f172a;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Executive Thin Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300/80 dark:bg-slate-700/80 rounded-full hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors;
+  }
+}
+
+@layer utilities {
+  /* Main Content Canvas: Subtle Ambient Radial Sky Glow + Technical Dotted Grid */
+  .canvas-pattern {
+    background-color: #eef2f6;
+    background-image: 
+      radial-gradient(ellipse 70% 45% at 50% -10%, rgba(219, 234, 254, 0.55), transparent 70%),
+      radial-gradient(circle at 1px 1px, rgba(100, 116, 139, 0.28) 1.2px, transparent 0);
+    background-size: 100% 100%, 24px 24px;
+  }
+  .dark .canvas-pattern {
+    background-color: #0a101c;
+    background-image: 
+      radial-gradient(ellipse 70% 45% at 50% -10%, rgba(37, 99, 235, 0.15), transparent 70%),
+      radial-gradient(circle at 1px 1px, rgba(70, 95, 130, 0.28) 1.2px, transparent 0);
+    background-size: 100% 100%, 24px 24px;
+  }
+
+  /* Sidebar Pattern: Distinct Technical Blueprint Micro-Grid */
+  .sidebar-pattern {
+    background-color: #ffffff;
+    background-image: 
+      linear-gradient(to right, rgba(203, 213, 225, 0.45) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(203, 213, 225, 0.45) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .dark .sidebar-pattern {
+    background-color: #0c1220;
+    background-image: 
+      linear-gradient(to right, rgba(40, 60, 90, 0.35) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(40, 60, 90, 0.35) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+}
