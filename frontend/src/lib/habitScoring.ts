@@ -1,4 +1,13 @@
-// Frontend Habit Scoring & Streak Logic
+/**
+ * Client-side mirror of `backend/src/lib/habitScoring.js`.
+ *
+ * Used ONLY to repaint the score immediately after a checkbox is clicked,
+ * without a round trip. The backend response remains the source of truth, so
+ * keep this file in step with the backend rules.
+ *
+ * Habits match by KEYWORD rather than exact name, so renaming a habit can
+ * never silently drop its points (which is what capped a perfect day at 95%).
+ */
 
 export interface MajorHabitSummary {
   key: string;
@@ -10,72 +19,114 @@ export interface MajorHabitSummary {
   totalTarget: number;
 }
 
-export function calculateDailyHabitScore(dayLogsByName: Record<string, boolean>): number {
-  let score = 0;
+export const STREAK_THRESHOLD = 80;
 
-  // 1. Wake Up early 4am - 5%
-  if (dayLogsByName['wake up early (4)']) score += 5;
+/** A day at or above this score extends the streak. */
+export const STREAK_GOAL = STREAK_THRESHOLD;
 
-  // 2. Workout/rest - 10%
-  if (dayLogsByName['workout / rest']) score += 10;
-
-  // 3. Morning Shower - 2%
-  if (dayLogsByName['morning shower']) score += 2;
-
-  // 4. Prayer/Dua - 5%
-  if (dayLogsByName['namaz / dua']) score += 5;
-
-  // 5. ColdCalling & Lead generation (considered 1, max 15%)
-  if (dayLogsByName['coldcall / practice'] || dayLogsByName['lead generation']) score += 15;
-
-  // 6. Professional Growth (Job search, LinkedIn hunt, Scholarships - considered 1, max 10%)
-  if (dayLogsByName['job search'] || dayLogsByName['linkedin hunt'] || dayLogsByName['scholarships']) score += 10;
-
-  // 7. Development (FYP and Project Dev: 1 is 15%, both is 20%)
-  const hasFYP = !!dayLogsByName['fyp development'];
-  const hasProject = !!dayLogsByName['project dev'];
-  if (hasFYP && hasProject) {
-    score += 20;
-  } else if (hasFYP || hasProject) {
-    score += 15;
-  }
-
-  // 8. Book reading - 5%
-  if (dayLogsByName['book reading']) score += 5;
-
-  // 9. Learning videos - 3%
-  if (dayLogsByName['learning videos']) score += 3;
-
-  // 10. Journaling - 2%
-  if (dayLogsByName['journaling']) score += 2;
-
-  // 11. Writing Dreams - 2%
-  if (dayLogsByName['writing dreams']) score += 2;
-
-  // 12. 5 prayers - 5%
-  if (dayLogsByName['5 prayers']) score += 5;
-
-  // 13. Sleep on time - 3%
-  if (dayLogsByName['sleep on time']) score += 3;
-
-  // 14. Calories surplus - 5%
-  if (dayLogsByName['calories surplus']) score += 5;
-
-  // 15. Protein Amount - 3%
-  if (dayLogsByName['protein amount']) score += 3;
-
-  // 16. No Doom Scroll - 2%
-  if (dayLogsByName['no doom scroll']) score += 2;
-
-  // 17. No Disrespecting - 1%
-  if (dayLogsByName['no disrespecting']) score += 1;
-
-  // 18. No Movie/show - 2%
-  if (dayLogsByName['no movie / show']) score += 2;
-
-  return Math.min(100, score);
+export interface ScoringRule {
+  id: string;
+  weight: number;
+  partial?: number;
+  keywords?: string[];
+  slots?: string[][];
 }
 
+export const SCORING_RULES: ScoringRule[] = [
+  { id: 'five_prayers', weight: 5, keywords: ['prayer'] },
+  { id: 'namaz_dua', weight: 5, keywords: ['namaz', 'dua', 'salah', 'pray'] },
+  { id: 'no_doom_scroll', weight: 2, keywords: ['doom', 'scroll'] },
+  { id: 'no_disrespecting', weight: 1, keywords: ['disrespect'] },
+  { id: 'no_movie_show', weight: 2, keywords: ['movie', 'show', 'series', 'netflix'] },
+  { id: 'sleep_on_time', weight: 3, keywords: ['sleep', 'bedtime'] },
+  { id: 'wake_up', weight: 5, keywords: ['wake'] },
+  { id: 'workout', weight: 10, keywords: ['workout', 'gym', 'training', 'exercise'] },
+  { id: 'morning_shower', weight: 2, keywords: ['shower'] },
+  { id: 'book_reading', weight: 5, keywords: ['book', 'read'] },
+  { id: 'learning_videos', weight: 3, keywords: ['learning', 'video', 'course', 'tutorial'] },
+  { id: 'journaling', weight: 2, keywords: ['journal'] },
+  { id: 'writing_dreams', weight: 2, keywords: ['dream'] },
+  { id: 'calories_surplus', weight: 5, keywords: ['calorie'] },
+  { id: 'protein_amount', weight: 3, keywords: ['protein'] },
+  { id: 'leads_calls', weight: 15, keywords: ['coldcall', 'coldcalling', 'call', 'lead'] },
+  { id: 'professional_growth', weight: 10, keywords: ['job', 'linkedin', 'scholarship'] },
+  { id: 'development', weight: 20, partial: 15, slots: [['fyp'], ['project']] }
+];
+
+export const MAX_DAILY_SCORE = SCORING_RULES.reduce((total, rule) => total + rule.weight, 0);
+
+const SUFFIXES = ['s', 'es', 'ing', 'ed'];
+
+/** Split a habit name into comparable lowercase word tokens. */
+export const tokenizeHabitName = (name: string): string[] =>
+  String(name || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+/** A word matches a keyword when it is the keyword, or the keyword plus a common suffix. */
+const tokenMatchesKeyword = (token: string, keyword: string): boolean =>
+  token === keyword || SUFFIXES.some((suffix) => token === `${keyword}${suffix}`);
+
+const matchesKeywords = (tokens: string[], keywords: string[]): boolean =>
+  tokens.some((token) => keywords.some((keyword) => tokenMatchesKeyword(token, keyword)));
+
+const keywordsFor = (rule: ScoringRule): string[] => rule.keywords || (rule.slots || []).flat();
+
+/** Map ruleId -> names of the habits feeding that rule. */
+export function assignHabitsToRules(habitNames: string[]) {
+  const assignments = new Map<string, string[]>();
+  const unmatched: string[] = [];
+
+  for (const name of habitNames) {
+    const tokens = tokenizeHabitName(name);
+    if (tokens.length === 0) continue;
+
+    const rule = SCORING_RULES.find((candidate) =>
+      matchesKeywords(tokens, keywordsFor(candidate))
+    );
+
+    if (!rule) {
+      unmatched.push(name);
+      continue;
+    }
+
+    if (!assignments.has(rule.id)) assignments.set(rule.id, []);
+    assignments.get(rule.id)!.push(name);
+  }
+
+  return { assignments, unmatched };
+}
+
+/** Score one day from the names of the habits checked that day. */
+export function calculateDailyHabitScore(checkedHabitNames: string[]): number {
+  const { assignments } = assignHabitsToRules(checkedHabitNames || []);
+
+  let score = 0;
+
+  for (const rule of SCORING_RULES) {
+    const assigned = assignments.get(rule.id);
+    if (!assigned || assigned.length === 0) continue;
+
+    if (rule.slots) {
+      const coveredSlots = rule.slots.filter((keywords) =>
+        assigned.some((name) => matchesKeywords(tokenizeHabitName(name), keywords))
+      ).length;
+
+      if (coveredSlots === rule.slots.length) {
+        score += rule.weight;
+      } else if (rule.partial !== undefined && coveredSlots >= 1) {
+        score += rule.partial;
+      }
+    } else {
+      score += rule.weight;
+    }
+  }
+
+  return Math.min(MAX_DAILY_SCORE, score);
+}
+
+/** Score every day of a month from the logs map returned by the API. */
 export function computeAllDailyScores(
   habits: any[],
   logsMap: Record<string, Record<number, boolean>>,
@@ -86,37 +137,29 @@ export function computeAllDailyScores(
   const weekdaysShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   const results = [];
 
-  const habitIdToNormalizedName: Record<string, string> = {};
-  habits.forEach(h => {
-    habitIdToNormalizedName[h._id.toString()] = h.name.toLowerCase().trim();
+  const nameByHabitId: Record<string, string> = {};
+  habits.forEach((habit) => {
+    nameByHabitId[habit._id.toString()] = habit.name;
   });
 
   for (let day = 1; day <= daysInMonth; day++) {
     const dayDate = new Date(year, month - 1, day);
-    const weekday = weekdaysShort[dayDate.getDay()];
-    const isSunday = dayDate.getDay() === 0;
-    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    const dayLogsByName: Record<string, boolean> = {};
-    let count = 0;
-
-    habits.forEach(h => {
-      const hId = h._id.toString();
-      if (logsMap[hId] && logsMap[hId][day]) {
-        count++;
-        dayLogsByName[habitIdToNormalizedName[hId]] = true;
+    const checkedNames: string[] = [];
+    habits.forEach((habit) => {
+      const habitId = habit._id.toString();
+      if (logsMap[habitId] && logsMap[habitId][day]) {
+        checkedNames.push(nameByHabitId[habitId]);
       }
     });
 
-    const score = calculateDailyHabitScore(dayLogsByName);
-
     results.push({
       day,
-      date: dateStr,
-      weekday,
-      isSunday,
-      score,
-      completedCount: count
+      date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      weekday: weekdaysShort[dayDate.getDay()],
+      isSunday: dayDate.getDay() === 0,
+      score: calculateDailyHabitScore(checkedNames),
+      completedCount: checkedNames.length
     });
   }
 
@@ -131,23 +174,16 @@ export function computeStreakCount(
   let streak = 0;
   const endDay = isCurrentMonth ? todayDay : dailyStats.length;
 
-  for (let d = 1; d <= endDay; d++) {
-    const stat = dailyStats[d - 1];
+  for (let day = 1; day <= endDay; day++) {
+    const stat = dailyStats[day - 1];
     if (!stat) continue;
 
-    if (d === endDay && isCurrentMonth) {
-      if (stat.score >= 80) {
-        streak++;
-      }
-    } else {
-      if (stat.score >= 80) {
-        streak++;
-      } else if (stat.isSunday) {
-        // Sunday is exempt! Does not break streak
-      } else {
-        // Non-Sunday with score < 80% breaks streak
-        streak = 0;
-      }
+    if (stat.score >= STREAK_THRESHOLD) {
+      streak++;
+    } else if (stat.isSunday) {
+      // Sunday is exempt: below-goal days do not break the streak.
+    } else if (day !== endDay || !isCurrentMonth) {
+      streak = 0;
     }
   }
 
@@ -155,14 +191,14 @@ export function computeStreakCount(
 }
 
 export const MAJOR_HABIT_CONFIGS = [
-  { key: 'book_reading', title: 'Book Reading', habits: ['book reading'], subtitle: 'Daily Reading' },
-  { key: 'journaling', title: 'Journaling', habits: ['journaling', 'writing dreams'], subtitle: 'Journaling & Dreams' },
-  { key: 'development', title: 'Development', habits: ['fyp development', 'project dev'], subtitle: 'FYP & Project Dev' },
-  { key: 'leads_calls', title: 'Leads / Calls', habits: ['coldcall / practice', 'lead generation'], subtitle: 'Cold Call & Leads' },
-  { key: 'workout', title: 'Workout', habits: ['workout / rest'], subtitle: 'Training & Rest' },
-  { key: 'diet', title: 'Diet', habits: ['calories surplus', 'protein amount'], subtitle: 'Calories & Protein' },
-  { key: 'personal_growth', title: 'Personal Growth', habits: ['learning videos', 'book reading', 'no movie / show', 'no disrespecting', 'no doom scroll', 'sleep on time', '5 prayers', 'namaz / dua'], subtitle: 'Mindset & Discipline' },
-  { key: 'professional_growth', title: 'Professional Growth', habits: ['scholarships', 'job search', 'linkedin hunt'], subtitle: 'Careers & Network' }
+  { key: 'book_reading', title: 'Book Reading', habits: ['book'], subtitle: 'Daily Reading' },
+  { key: 'journaling', title: 'Journaling', habits: ['journal', 'dream'], subtitle: 'Journaling & Dreams' },
+  { key: 'development', title: 'Development', habits: ['fyp', 'project'], subtitle: 'FYP & Project Dev' },
+  { key: 'leads_calls', title: 'Leads / Calls', habits: ['coldcall', 'lead'], subtitle: 'Cold Call & Leads' },
+  { key: 'workout', title: 'Workout', habits: ['workout'], subtitle: 'Training & Rest' },
+  { key: 'diet', title: 'Diet', habits: ['calorie', 'protein'], subtitle: 'Calories & Protein' },
+  { key: 'personal_growth', title: 'Personal Growth', habits: ['learning', 'video', 'book', 'movie', 'show', 'disrespect', 'doom', 'scroll', 'sleep', 'prayer', 'namaz', 'dua'], subtitle: 'Mindset & Discipline' },
+  { key: 'professional_growth', title: 'Professional Growth', habits: ['job', 'linkedin', 'scholarship'], subtitle: 'Careers & Network' }
 ];
 
 export function computeMajorHabitsStats(
@@ -170,29 +206,37 @@ export function computeMajorHabitsStats(
   logsMap: Record<string, Record<number, boolean>>,
   elapsedDays: number
 ): MajorHabitSummary[] {
-  return MAJOR_HABIT_CONFIGS.map(cfg => {
-    let completedChecks = 0;
+  return MAJOR_HABIT_CONFIGS.map((config) => {
     const matchedHabitIds = habits
-      .filter(h => cfg.habits.includes(h.name.toLowerCase().trim()))
-      .map(h => h._id.toString());
+      .filter((habit) => {
+        const tokens = tokenizeHabitName(habit.name);
+        return tokens.some((token) =>
+          config.habits.some(
+            (keyword) =>
+              token === keyword ||
+              token === `${keyword}s` ||
+              token === `${keyword}ing` ||
+              token === `${keyword}ed`
+          )
+        );
+      })
+      .map((habit) => habit._id.toString());
 
-    matchedHabitIds.forEach(hId => {
-      if (logsMap[hId]) {
-        completedChecks += Object.keys(logsMap[hId]).length;
-      }
-    });
+    const completedChecks = matchedHabitIds.reduce(
+      (sum, habitId) => sum + Object.keys(logsMap[habitId] || {}).length,
+      0
+    );
 
     const totalTarget = matchedHabitIds.length * Math.max(1, elapsedDays);
-    const percent = totalTarget > 0 ? Math.min(100, Math.round((completedChecks / totalTarget) * 100)) : 0;
 
     return {
-      key: cfg.key,
-      title: cfg.title,
-      subtitle: cfg.subtitle,
-      habits: cfg.habits,
+      key: config.key,
+      title: config.title,
+      subtitle: config.subtitle,
+      habits: config.habits,
       completedChecks,
       totalTarget,
-      percent
+      percent: totalTarget > 0 ? Math.min(100, Math.round((completedChecks / totalTarget) * 100)) : 0
     };
   });
 }

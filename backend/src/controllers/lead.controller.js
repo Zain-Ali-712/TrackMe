@@ -128,16 +128,20 @@ export const deleteLead = async (req, res) => {
 export const getLeadStats = async (req, res) => {
   try {
     const now = new Date();
-    
+
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     const startOfWeek = new Date(now);
     const day = startOfWeek.getDay(), diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff);
     startOfWeek.setHours(0, 0, 0, 0);
-    
+
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
+    const startOf7DaysAgo = new Date(now);
+    startOf7DaysAgo.setDate(startOf7DaysAgo.getDate() - 6);
+    startOf7DaysAgo.setHours(0, 0, 0, 0);
+
     const [
       totalLeads,
       leadsToday,
@@ -146,7 +150,10 @@ export const getLeadStats = async (req, res) => {
       totalCalls,
       callsThisWeek,
       callsThisMonth,
-      upcomingAppointmentsList
+      upcomingAppointmentsList,
+      // One aggregation replaces the 14 countDocuments calls the 7-day trend
+      // used to make.
+      trendRows
     ] = await Promise.all([
       Lead.countDocuments(),
       Lead.countDocuments({ createdAt: { $gte: startOfToday } }),
@@ -158,30 +165,34 @@ export const getLeadStats = async (req, res) => {
       Appointment.find({ dateTime: { $gte: now }, status: 'Scheduled' })
         .populate('lead', 'businessName personName')
         .sort({ dateTime: 1 })
-        .limit(5)
+        .limit(5),
+      Lead.aggregate([
+        { $match: { createdAt: { $gte: startOf7DaysAgo } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            leads: { $sum: 1 },
+            calls: {
+              $sum: { $cond: [{ $eq: ['$coldCalled', true] }, 1, 0] }
+            }
+          }
+        }
+      ])
     ]);
 
-    const startOf7DaysAgo = new Date(now);
-    startOf7DaysAgo.setDate(startOf7DaysAgo.getDate() - 6);
-    startOf7DaysAgo.setHours(0,0,0,0);
+    const trendByDate = new Map(trendRows.map((row) => [row._id, row]));
 
     const chartData = [];
-    
     for (let i = 0; i < 7; i++) {
-      const d = new Date(startOf7DaysAgo);
-      d.setDate(d.getDate() + i);
-      const nextD = new Date(d);
-      nextD.setDate(nextD.getDate() + 1);
-      
-      const [leads, calls] = await Promise.all([
-        Lead.countDocuments({ createdAt: { $gte: d, $lt: nextD } }),
-        Lead.countDocuments({ coldCalled: true, coldCalledAt: { $gte: d, $lt: nextD } })
-      ]);
-      
+      const dayStart = new Date(startOf7DaysAgo);
+      dayStart.setDate(dayStart.getDate() + i);
+      const key = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
+      const row = trendByDate.get(key);
+
       chartData.push({
-        date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
-        leads,
-        calls
+        date: dayStart.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+        leads: row?.leads || 0,
+        calls: row?.calls || 0
       });
     }
 
@@ -258,51 +269,76 @@ export const getNicheStats = async (req, res) => {
     });
 
     // 4. Trend Data Generation (includes leads, appointments, closed)
-    const trendData = [];
+    //    Built with a single grouped aggregation per series. This previously ran
+    //    3 countDocuments x 30/31 days (about 93 sequential round trips).
+    let trendStart;
+    let trendEnd;
+    let dayCount;
+    let labelFormat;
+
     if (isMonthFilter && monthStart && monthEnd) {
-      const daysInTargetMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
-      for (let day = 1; day <= daysInTargetMonth; day++) {
-        const dStart = new Date(monthStart.getFullYear(), monthStart.getMonth(), day, 0, 0, 0);
-        const dEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), day + 1, 0, 0, 0);
-        
-        const [leadCount, apptCount, closedCount] = await Promise.all([
-          Lead.countDocuments({ ...nicheFilter, createdAt: { $gte: dStart, $lt: dEnd } }),
-          Lead.countDocuments({ ...nicheFilter, status: 'Appointment', createdAt: { $gte: dStart, $lt: dEnd } }),
-          Lead.countDocuments({ ...nicheFilter, status: 'Closed', createdAt: { $gte: dStart, $lt: dEnd } })
-        ]);
-
-        trendData.push({
-          date: `${dStart.toLocaleDateString('en-US', { month: 'short' })} ${day}`,
-          leads: leadCount,
-          appointments: apptCount,
-          closed: closedCount
-        });
-      }
+      trendStart = new Date(monthStart);
+      trendEnd = new Date(monthEnd);
+      dayCount = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+      labelFormat = 'monthDay';
     } else {
-      // Last 30 days for All Time
-      const startOf30DaysAgo = new Date(now);
-      startOf30DaysAgo.setDate(startOf30DaysAgo.getDate() - 29);
-      startOf30DaysAgo.setHours(0, 0, 0, 0);
+      trendStart = new Date(now);
+      trendStart.setDate(trendStart.getDate() - 29);
+      trendStart.setHours(0, 0, 0, 0);
+      trendEnd = new Date(now);
+      trendEnd.setDate(trendEnd.getDate() + 1);
+      trendEnd.setHours(0, 0, 0, 0);
+      dayCount = 30;
+      labelFormat = 'shortDate';
+    }
 
-      for (let i = 0; i < 30; i++) {
-        const d = new Date(startOf30DaysAgo);
-        d.setDate(d.getDate() + i);
-        const nextD = new Date(d);
-        nextD.setDate(nextD.getDate() + 1);
+    const [leadTrend, appointmentTrend, closedTrend] = await Promise.all([
+      Lead.aggregate([
+        { $match: { ...nicheFilter, createdAt: { $gte: trendStart, $lt: trendEnd } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
+      ]),
+      Lead.aggregate([
+        {
+          $match: {
+            ...nicheFilter,
+            status: 'Appointment',
+            createdAt: { $gte: trendStart, $lt: trendEnd }
+          }
+        },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
+      ]),
+      Lead.aggregate([
+        {
+          $match: {
+            ...nicheFilter,
+            status: 'Closed',
+            createdAt: { $gte: trendStart, $lt: trendEnd }
+          }
+        },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
+      ])
+    ]);
 
-        const [leadCount, apptCount, closedCount] = await Promise.all([
-          Lead.countDocuments({ ...nicheFilter, createdAt: { $gte: d, $lt: nextD } }),
-          Lead.countDocuments({ ...nicheFilter, status: 'Appointment', createdAt: { $gte: d, $lt: nextD } }),
-          Lead.countDocuments({ ...nicheFilter, status: 'Closed', createdAt: { $gte: d, $lt: nextD } })
-        ]);
+    const toCountMap = (rows) => new Map(rows.map((row) => [row._id, row.count]));
+    const leadByDate = toCountMap(leadTrend);
+    const appointmentByDate = toCountMap(appointmentTrend);
+    const closedByDate = toCountMap(closedTrend);
 
-        trendData.push({
-          date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          leads: leadCount,
-          appointments: apptCount,
-          closed: closedCount
-        });
-      }
+    const trendData = [];
+    for (let i = 0; i < dayCount; i++) {
+      const dayStart = new Date(trendStart);
+      dayStart.setDate(dayStart.getDate() + i);
+
+      const key = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
+
+      trendData.push({
+        date: labelFormat === 'monthDay'
+          ? `${dayStart.toLocaleDateString('en-US', { month: 'short' })} ${dayStart.getDate()}`
+          : dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        leads: leadByDate.get(key) || 0,
+        appointments: appointmentByDate.get(key) || 0,
+        closed: closedByDate.get(key) || 0
+      });
     }
 
     // 5. Conversion stats

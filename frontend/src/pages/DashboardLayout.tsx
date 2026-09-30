@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarCheck, Sun, Moon, Menu, X, Plus, Layers, CheckSquare, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarCheck, Sun, Moon, Menu, X, Plus, Layers, CheckSquare, BarChart2, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import LeadFormDialog from '@/components/leads/LeadFormDialog';
 import { createLead } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 
 export default function DashboardLayout() {
+  const { signOut } = useAuth();
   const [isDark, setIsDark] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
   });
@@ -34,6 +36,11 @@ export default function DashboardLayout() {
   const toggleDark = () => setIsDark(!isDark);
   const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success('Signed out');
+  };
 
   const toggleCollapsed = () => {
     setIsCollapsed((prev) => {
@@ -181,6 +188,18 @@ export default function DashboardLayout() {
                 {isDark ? 'Dark' : 'Light'}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={handleSignOut}
+            title={isCollapsed ? 'Sign Out' : undefined}
+            className={cn(
+              "flex w-full items-center rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-900 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]",
+              isCollapsed ? "justify-center p-2.5" : "gap-2.5 px-3.5 py-2.5 mt-2"
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>Sign Out</span>}
           </button>
         </div>
       </aside>

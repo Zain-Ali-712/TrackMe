@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Flame, Target } from 'lucide-react';
+import { STREAK_THRESHOLD } from '@/lib/habitScoring';
 
 interface HabitScoreChartProps {
   data: Array<{
@@ -54,9 +55,9 @@ export default function HabitScoreChart({ data }: HabitScoreChartProps) {
             </span>
           </div>
           <div className="pt-1.5 border-t border-slate-800 text-[10px] font-semibold">
-            {score >= 80 ? (
+            {score >= STREAK_THRESHOLD ? (
               <span className="text-emerald-400 flex items-center gap-1">
-                <Flame className="h-3 w-3" /> Streak Target Met (≥80%)
+                <Flame className="h-3 w-3" /> Streak Target Met (≥{STREAK_THRESHOLD}%)
               </span>
             ) : isSunday ? (
               <span className="text-amber-400">
@@ -64,7 +65,7 @@ export default function HabitScoreChart({ data }: HabitScoreChartProps) {
               </span>
             ) : (
               <span className="text-slate-400">
-                Below 80% Streak Goal
+                Below {STREAK_THRESHOLD}% Streak Goal
               </span>
             )}
           </div>
@@ -87,7 +88,7 @@ export default function HabitScoreChart({ data }: HabitScoreChartProps) {
                 Daily Habits Score Rhythm
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                Weighted performance score with 80% streak benchmark
+                Weighted performance score with {STREAK_THRESHOLD}% streak benchmark
               </p>
             </div>
           </div>
@@ -99,7 +100,7 @@ export default function HabitScoreChart({ data }: HabitScoreChartProps) {
             Avg: {avgScore}%
           </span>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-semibold">
-            Streak Goal: 80%
+            Streak Goal: {STREAK_THRESHOLD}%
           </span>
         </div>
       </div>
@@ -135,7 +136,7 @@ export default function HabitScoreChart({ data }: HabitScoreChartProps) {
             
             {/* 80% Benchmark Reference Line */}
             <ReferenceLine 
-              y={80} 
+              y={STREAK_THRESHOLD} 
               stroke="#10b981" 
               strokeDasharray="4 4" 
               strokeWidth={1.5}
@@ -163,7 +164,7 @@ export default function HabitScoreChart({ data }: HabitScoreChartProps) {
         </div>
         <div className="flex items-center gap-2">
           <span className="w-4 h-0.5 border-t-2 border-dashed border-emerald-500" />
-          <span className="font-semibold text-emerald-600 dark:text-emerald-400">80% Streak Benchmark</span>
+          <span className="font-semibold text-emerald-600 dark:text-emerald-400">{STREAK_THRESHOLD}% Streak Benchmark</span>
         </div>
       </div>
     </div>

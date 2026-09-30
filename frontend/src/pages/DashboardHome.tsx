@@ -5,6 +5,7 @@ import { fetchLeadStats, fetchMonthHabitData } from '@/lib/api';
 import LeadsTrendChart from '@/components/dashboard/LeadsTrendChart';
 import UpcomingAppointments from '@/components/dashboard/UpcomingAppointments';
 import { cn } from '@/lib/utils';
+import { STREAK_THRESHOLD } from '@/lib/habitScoring';
 
 export default function DashboardHome() {
   const navigate = useNavigate();
@@ -99,7 +100,7 @@ export default function DashboardHome() {
   const monthProgress = habitStats?.overallStats?.monthlyProgressPercent ?? 0;
 
   const habitCurrent = todayScore;
-  const habitGoal = 80; // 80% goal
+  const habitGoal = STREAK_THRESHOLD;
   const habitProgressRatio = Math.min(100, Math.round((habitCurrent / habitGoal) * 100));
 
   // Circular Progress Gauge Geometry
@@ -171,7 +172,7 @@ export default function DashboardHome() {
             </div>
           </div>
           <div className="text-right text-[11px] text-slate-500 dark:text-slate-400 font-medium pl-2 border-l border-slate-100 dark:border-slate-800">
-            <div>Target: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">≥80%</strong></div>
+            <div>Target: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">≥{STREAK_THRESHOLD}%</strong></div>
             <div className="text-[10px] text-slate-400">Sun Exempt</div>
           </div>
         </div>
@@ -415,19 +416,19 @@ export default function DashboardHome() {
           <div className="flex items-center justify-between my-3 gap-3">
             <div className="space-y-1">
               <div className="text-3xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tight">
-                {habitCurrent}% <span className="text-base text-slate-400 font-bold">/ 80%</span>
+                {habitCurrent}% <span className="text-base text-slate-400 font-bold">/ {STREAK_THRESHOLD}%</span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Streak benchmark: 80% daily score
+                Streak benchmark: {STREAK_THRESHOLD}% daily score
               </p>
               <div className="pt-2">
                 <span className={cn(
                   'inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border',
-                  habitCurrent >= 80
+                  habitCurrent >= STREAK_THRESHOLD
                     ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                     : 'bg-amber-50/60 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 border-amber-200/70 dark:border-amber-900/40'
                 )}>
-                  {habitCurrent >= 80 ? 'Streak Target Met!' : `${80 - habitCurrent}% needed for streak`}
+                  {habitCurrent >= STREAK_THRESHOLD ? 'Streak Target Met!' : `${STREAK_THRESHOLD - habitCurrent}% needed for streak`}
                 </span>
               </div>
             </div>

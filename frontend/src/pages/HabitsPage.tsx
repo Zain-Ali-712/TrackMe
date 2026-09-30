@@ -18,7 +18,8 @@ import {
 import {
   computeAllDailyScores,
   computeStreakCount,
-  computeMajorHabitsStats
+  computeMajorHabitsStats,
+  STREAK_THRESHOLD
 } from '@/lib/habitScoring';
 import HabitGrid from '@/components/habits/HabitGrid';
 import HabitProgressGauge from '@/components/habits/HabitProgressGauge';
@@ -69,12 +70,18 @@ export default function HabitsPage() {
 
   // Optimistic Toggle Checkbox
   const handleToggleHabit = async (
-    habitId: string, 
-    day: number, 
-    dateStr: string, 
+    habitId: string,
+    day: number,
+    dateStr: string,
     currentVal: boolean
   ) => {
     if (!data) return;
+
+    // The backend enforces the same rule; this avoids firing a doomed request.
+    if (dateStr < (data.latestEditableDate || '')) {
+      toast.error('Only today and yesterday can be edited');
+      return;
+    }
 
     const newVal = !currentVal;
 
@@ -327,7 +334,7 @@ export default function HabitsPage() {
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
-                    Maintains on ≥80% (Sunday exempt)
+                    Maintains on ≥{STREAK_THRESHOLD}% (Sunday exempt)
                   </p>
                 </div>
                 <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
@@ -338,7 +345,7 @@ export default function HabitsPage() {
                       ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
                       : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                   )}>
-                    {(data.streakCount || 0) > 0 ? 'Active Streak' : 'Target: ≥80% Today'}
+                    {(data.streakCount || 0) > 0 ? 'Active Streak' : `Target: ≥${STREAK_THRESHOLD}% Today`}
                   </span>
                 </div>
               </div>
@@ -366,7 +373,7 @@ export default function HabitsPage() {
                     <div 
                       className={cn(
                         "h-full rounded-full transition-all duration-500",
-                        (data.todayScore || 0) >= 80 ? "bg-emerald-500" : "bg-blue-600"
+                        (data.todayScore || 0) >= STREAK_THRESHOLD ? "bg-emerald-500" : "bg-blue-600"
                       )}
                       style={{ width: `${Math.min(100, data.todayScore || 0)}%` }}
                     />
@@ -376,11 +383,13 @@ export default function HabitsPage() {
                   <span className="text-slate-400 font-medium">Goal Status:</span>
                   <span className={cn(
                     "font-bold px-2 py-0.5 rounded-full text-[10px]",
-                    (data.todayScore || 0) >= 80
+                    (data.todayScore || 0) >= STREAK_THRESHOLD
                       ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                       : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                   )}>
-                    {(data.todayScore || 0) >= 80 ? 'Streak Safe (≥80%)' : `${80 - (data.todayScore || 0)}% to Streak`}
+                    {(data.todayScore || 0) >= STREAK_THRESHOLD
+                      ? `Streak Safe (≥${STREAK_THRESHOLD}%)`
+                      : `${STREAK_THRESHOLD - (data.todayScore || 0)}% to Streak`}
                   </span>
                 </div>
               </div>
@@ -418,7 +427,7 @@ export default function HabitsPage() {
                   {MONTH_NAMES[selectedMonth - 1]} {selectedYear} Habit Matrix
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Daily checklist with instant automated scoring. Scores ≥80% maintain your streak.
+                  Daily checklist with instant automated scoring. Scores ≥{STREAK_THRESHOLD}% maintain your streak.
                 </p>
               </div>
             </div>
@@ -432,6 +441,7 @@ export default function HabitsPage() {
               metricsMap={data.metricsMap}
               eachHabitStats={data.eachHabitStats}
               dailyStats={data.dailyStats}
+              latestEditableDate={data.latestEditableDate}
               onToggleHabit={handleToggleHabit}
               onUpdateSleep={handleUpdateSleep}
               onEditHabit={(h) => { setEditingHabit(h); setIsFormOpen(true); }}

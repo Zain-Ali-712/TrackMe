@@ -1,6 +1,7 @@
 import React from 'react';
-import { Check, Edit2, Plus, Flame } from 'lucide-react';
+import { Check, Edit2, Plus, Flame, Lock } from 'lucide-react';
 import { cn, getHabitIcon } from '@/lib/utils';
+import { STREAK_THRESHOLD } from '@/lib/habitScoring';
 
 interface HabitGridProps {
   year: number;
@@ -11,6 +12,8 @@ interface HabitGridProps {
   metricsMap?: Record<number, { sleepHours: number; notes: string }>;
   eachHabitStats: any[];
   dailyStats: any[];
+  /** Oldest date that may still be toggled — today and yesterday. From the API. */
+  latestEditableDate?: string;
   onToggleHabit: (habitId: string, day: number, dateStr: string, currentVal: boolean) => void;
   onUpdateSleep?: (dateStr: string, hours: number) => void;
   onEditHabit: (habit: any) => void;
@@ -25,6 +28,7 @@ export default function HabitGrid({
   logsMap,
   eachHabitStats,
   dailyStats,
+  latestEditableDate,
   onToggleHabit,
   onEditHabit,
   onAddHabit
@@ -32,6 +36,19 @@ export default function HabitGrid({
   const now = new Date();
   const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === month;
   const todayDay = now.getDate();
+
+  // Habits can only be changed for today and yesterday; older days are frozen
+  // and future days cannot be logged. The API sends the lower bound.
+  const editableFrom = latestEditableDate || '';
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const dateFor = (day: number) =>
+    `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  const isEditableDay = (dateStr: string) =>
+    editableFrom !== '' && dateStr >= editableFrom && dateStr <= todayStr;
+
+  const isPastMonth = !isCurrentMonth;
 
   // Compute weeks grouping
   const weeks: Array<{ weekNum: number; days: number[] }> = [];
@@ -185,30 +202,51 @@ export default function HabitGrid({
                     const isChecked = Boolean(logsMap[hId] && logsMap[hId][day]);
                     const isToday = isCurrentMonth && day === todayDay;
                     const isSunday = new Date(year, month - 1, day).getDay() === 0;
-                    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const dateStr = dateFor(day);
+                    const isEditable = !isPastMonth && isEditableDay(dateStr);
 
                     return (
                       <td
                         key={day}
-                        onClick={() => onToggleHabit(hId, day, dateStr, isChecked)}
+                        onClick={() => {
+                          if (!isEditable) return;
+                          onToggleHabit(hId, day, dateStr, isChecked);
+                        }}
+                        title={
+                          isEditable
+                            ? undefined
+                            : isPastMonth
+                            ? 'This month has passed. Habits can only be changed for today and yesterday.'
+                            : dateStr > todayStr
+                            ? 'This day has not happened yet.'
+                            : 'This day is locked. Habits can only be changed for today and yesterday.'
+                        }
                         className={cn(
-                          "w-[34px] min-w-[34px] p-1 text-center cursor-pointer border-r border-slate-100 dark:border-slate-800/60 transition-colors",
-                          isToday 
-                            ? "bg-blue-50/40 dark:bg-blue-950/20" 
+                          "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+                          isToday
+                            ? "bg-blue-50/40 dark:bg-blue-950/20"
                             : isSunday
                             ? "dark:bg-amber-950/10"
                             : "",
-                          isChecked 
-                            ? "hover:opacity-90" 
-                            : "hover:bg-slate-100/60 dark:hover:bg-slate-800/40"
+                          isEditable
+                            ? "cursor-pointer"
+                            : "cursor-not-allowed",
+                          isEditable
+                            ? isChecked
+                              ? "hover:opacity-90"
+                              : "hover:bg-slate-100/60 dark:hover:bg-slate-800/40"
+                            : ""
                         )}
                       >
                         <div
                           className={cn(
-                            "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border cursor-pointer",
+                            "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border",
+                            isEditable && "cursor-pointer",
+                            !isEditable && "opacity-55 saturate-[0.85]",
                             isChecked
                               ? "bg-emerald-500 text-white border-emerald-600 dark:bg-emerald-500 dark:text-white dark:border-emerald-400 dark:shadow-[0_0_8px_rgba(16,185,129,0.35)] scale-100"
-                              : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80"
+                              : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80",
+                            !isEditable && "hover:border-slate-250 hover:bg-slate-50/50 dark:hover:bg-slate-800/80 dark:hover:border-slate-700"
                           )}
                         >
                           {isChecked && <Check className="h-3.5 w-3.5 stroke-[3]" />}
@@ -282,7 +320,7 @@ export default function HabitGrid({
 
               {dailyStats.map((stat) => {
                 const score = stat.score || 0;
-                const isMet = score >= 80;
+                const isMet = score >= STREAK_THRESHOLD;
                 const isSun = stat.isSunday;
 
                 return (
@@ -315,6 +353,27 @@ export default function HabitGrid({
             </tr>
           </tbody>
         </table>
+      </div>
+
+      {/* Legend: explains which cells can still be changed */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+        <span className="flex items-center gap-1.5">
+          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" strokeWidth={3} />
+          Completed
+        </span>
+        <span className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm border border-slate-250 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/80" />
+          Not done
+        </span>
+        {!isPastMonth && (
+          <span className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">
+            <Lock className="h-3 w-3" />
+            Locked — only today and yesterday can be edited
+            {editableFrom && (
+              <span className="tabular-nums">({editableFrom} onward)</span>
+            )}
+          </span>
+        )}
       </div>
     </div>
   );
