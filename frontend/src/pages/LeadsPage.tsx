@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, X } from 'lucide-react';
+import { Search, Plus, X, Upload } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchNiches, fetchLeads, updateLead, deleteLead, createLead, createNiche, updateNiche, deleteNiche, createAppointment } from '@/lib/api';
@@ -35,6 +35,8 @@ export default function LeadsPage() {
 
   // Inline spreadsheet adding state
   const [isAddingLeadRow, setIsAddingLeadRow] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Dialog states for editing existing items
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
@@ -113,6 +115,88 @@ export default function LeadsPage() {
       toast.error('Failed to create lead');
     }
   };
+
+  // Excel / CSV import — loads SheetJS from CDN dynamically (no npm install needed)
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset file input so the same file can be re-imported if needed
+    e.target.value = '';
+
+    const assignedNiche = activeNicheId && activeNicheId !== 'all' ? activeNicheId : niches[0]?._id;
+    if (!assignedNiche) {
+      toast.error('Please create a niche first before importing');
+      setIsNicheFormOpen(true);
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      // Dynamically load SheetJS from CDN (avoids any npm/disk space requirement)
+      const XLSX: any = await new Promise((resolve, reject) => {
+        if ((window as any).XLSX) { resolve((window as any).XLSX); return; }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.onload = () => resolve((window as any).XLSX);
+        script.onerror = () => reject(new Error('Failed to load SheetJS'));
+        document.head.appendChild(script);
+      });
+
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if (rows.length === 0) {
+        toast.error('No data rows found in the file');
+        setIsImporting(false);
+        return;
+      }
+
+      // Column name mapping — case-insensitive, supports common variants
+      const normalize = (key: string) => key.toLowerCase().replace(/[\s_\-]/g, '');
+      const FIELD_MAP: Record<string, string> = {
+        businessname: 'businessName', business: 'businessName', company: 'businessName', name: 'businessName',
+        personname: 'personName', person: 'personName', contact: 'personName', contactname: 'personName', owner: 'personName',
+        phone: 'contact', phonenumber: 'contact', mobile: 'contact', number: 'contact', tel: 'contact',
+        email: 'email', emailaddress: 'email', mail: 'email',
+        website: 'website', url: 'website', web: 'website', site: 'website',
+        location: 'location', city: 'location', address: 'location', area: 'location',
+        notes: 'notes', note: 'notes', comments: 'notes', remark: 'notes', remarks: 'notes',
+        status: 'status',
+      };
+
+      let created = 0;
+      let skipped = 0;
+      for (const row of rows) {
+        const lead: any = { niche: assignedNiche, status: 'New Lead', coldCalled: false };
+        for (const [rawKey, val] of Object.entries(row)) {
+          const mappedField = FIELD_MAP[normalize(rawKey)];
+          if (mappedField && val !== '') {
+            lead[mappedField] = String(val).trim();
+          }
+        }
+        // Require at least a business name to create the lead
+        if (!lead.businessName) { skipped++; continue; }
+        try {
+          await createLead(lead);
+          created++;
+        } catch { skipped++; }
+      }
+
+      if (created > 0) {
+        toast.success(`${created} lead${created > 1 ? 's' : ''} imported successfully${skipped > 0 ? ` (${skipped} rows skipped — missing business name)` : ''}`);
+        loadLeads();
+      } else {
+        toast.error(`No leads were imported. Make sure the file has a "Business Name" column.`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to import file');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
 
   const handleUpdateLeadInline = async (id: string, updates: any) => {
     try {
@@ -218,6 +302,26 @@ export default function LeadsPage() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Hidden file input for Excel/CSV import */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={handleExcelImport}
+          />
+
+          {/* Import from Excel button */}
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="w-full sm:w-auto h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            {isImporting ? 'Importing...' : 'Import Excel'}
+          </Button>
+
           {isAddingLeadRow ? (
             <Button
               variant="outline"

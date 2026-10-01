@@ -49,11 +49,12 @@ export default function LeadTable({
   const [newNotes, setNewNotes] = useState('');
   const [isSubmittingNew, setIsSubmittingNew] = useState(false);
 
+  // Reset draft every time the row is opened so cancelled data never persists
   useEffect(() => {
-    // User requirement: When adding new lead, status is strictly "New Lead" and call checkbox is empty/unchecked
-    setNewStatus('New Lead');
-    setNewColdCalled(false);
-  }, []);
+    if (isAddingRow) {
+      resetDraft();
+    }
+  }, [isAddingRow]);
 
   const resetDraft = () => {
     setNewBusinessName('');
