@@ -35,7 +35,7 @@ if (process.env.NODE_ENV !== 'production') {
 connectDB();
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ status: 'ok', time: new Date().toISOString(), version: '1.0.1' });
 });
 
 app.use('/api/auth', authRoutes);
