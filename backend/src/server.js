@@ -34,13 +34,13 @@ if (process.env.NODE_ENV !== 'production') {
 // hot path of all pages.
 connectDB();
 
-app.use('/api', requireAuth);
-
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
 app.use('/api/auth', authRoutes);
+
+app.use('/api', requireAuth);
 app.use('/api/niches', nicheRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/appointments', appointmentRoutes);
