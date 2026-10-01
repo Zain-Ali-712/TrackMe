@@ -19,10 +19,35 @@ const app = express();
 
 app.disable('x-powered-by');
 app.use(compression());
+
+// Allow both production frontend and localhost for development
+const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, '') || '';
+const allowedOrigins = [
+  frontendUrl,
+  'http://localhost:5173',
+  'http://localhost:4173'
+].filter(o => o.length > 0);
+
+console.log('CORS allowed origins:', allowedOrigins);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    const normalized = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(normalized)) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
   credentials: true
 }));
+
 app.use(express.json({ limit: '100kb' }));
 
 if (process.env.NODE_ENV !== 'production') {
@@ -35,7 +60,7 @@ if (process.env.NODE_ENV !== 'production') {
 connectDB();
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString(), version: '1.0.1' });
+  res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
 app.use('/api/auth', authRoutes);
