@@ -1,4 +1,4 @@
-﻿import Lead from '../models/Lead.js';
+import Lead from '../models/Lead.js';
 import Appointment from '../models/Appointment.js';
 import Niche from '../models/Niche.js';
 
@@ -380,6 +380,19 @@ export const getNicheStats = async (req, res) => {
       trendData,
       availableMonths
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const batchDeleteLeads = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'No lead IDs provided' });
+    }
+    const result = await Lead.deleteMany({ _id: { $in: ids } });
+    res.json({ message: `Successfully deleted ${result.deletedCount} leads`, deletedCount: result.deletedCount });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

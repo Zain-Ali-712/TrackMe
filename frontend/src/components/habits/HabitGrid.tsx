@@ -1,7 +1,9 @@
 import React from 'react';
-import { Check, Edit2, Plus, Flame, Lock } from 'lucide-react';
+import { Check, Edit2, Plus, Flame, Lock, Dumbbell, Moon, X, UtensilsCrossed, Activity } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn, getHabitIcon } from '@/lib/utils';
 import { STREAK_THRESHOLD } from '@/lib/habitScoring';
+import toast from 'react-hot-toast';
 
 interface HabitGridProps {
   year: number;
@@ -9,13 +11,15 @@ interface HabitGridProps {
   daysInMonth: number;
   habits: any[];
   logsMap: Record<string, Record<number, boolean>>;
-  metricsMap?: Record<number, { sleepHours: number; notes: string }>;
+  metricsMap?: Record<number, { sleepHours: number; notes: string; calories?: number; protein?: number; workoutStatus?: string }>;
   eachHabitStats: any[];
   dailyStats: any[];
+  dailyLeadActivity?: { leadsByDay: Record<number, number>; callsByDay: Record<number, number> };
   /** Oldest date that may still be toggled — today and yesterday. From the API. */
   latestEditableDate?: string;
   onToggleHabit: (habitId: string, day: number, dateStr: string, currentVal: boolean) => void;
   onUpdateSleep?: (dateStr: string, hours: number) => void;
+  onUpdateMetric?: (data: { date: string; calories?: number; protein?: number; workoutStatus?: string }) => void;
   onEditHabit: (habit: any) => void;
   onAddHabit: () => void;
 }
@@ -26,10 +30,13 @@ export default function HabitGrid({
   daysInMonth,
   habits,
   logsMap,
+  metricsMap,
   eachHabitStats,
   dailyStats,
+  dailyLeadActivity,
   latestEditableDate,
   onToggleHabit,
+  onUpdateMetric,
   onEditHabit,
   onAddHabit
 }: HabitGridProps) {
@@ -171,6 +178,13 @@ export default function HabitGrid({
               };
               const HabitIcon = getHabitIcon(habit.name, habit.icon);
 
+              const habitLower = (habit.name || '').toLowerCase();
+              const isCalorieHabit = habitLower.includes('calorie');
+              const isProteinHabit = habitLower.includes('protein');
+              const isWorkoutHabit = habitLower.includes('workout');
+              const isLeadHabit = habitLower.includes('lead');
+              const isColdCallHabit = habitLower.includes('coldcall') || habitLower.includes('cold call');
+
               return (
                 <tr key={hId} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 group transition-colors">
                   {/* Sticky Habit Name Column with Lucide Icon (NO EMOJIS) */}
@@ -205,11 +219,212 @@ export default function HabitGrid({
                     const dateStr = dateFor(day);
                     const isEditable = !isPastMonth && isEditableDay(dateStr);
 
+                    // 1. Special Case: Calories Habit Input (target > 2400 kcal)
+                    if (isCalorieHabit) {
+                      const currentCal = metricsMap?.[day]?.calories || 0;
+                      return (
+                        <td
+                          key={day}
+                          className={cn(
+                            "w-[34px] min-w-[34px] p-0.5 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+                            isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isSunday ? "dark:bg-amber-950/10" : ""
+                          )}
+                        >
+                          <input
+                            type="number"
+                            min={0}
+                            max={9999}
+                            step={50}
+                            placeholder="cal"
+                            disabled={!isEditable}
+                            defaultValue={currentCal > 0 ? currentCal : ''}
+                            key={`cal-${day}-${currentCal}`}
+                            onBlur={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              if (val !== currentCal && onUpdateMetric) {
+                                onUpdateMetric({ date: dateStr, calories: val });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            className={cn(
+                              "w-[30px] h-6 text-[9px] font-black text-center rounded transition-all border outline-none px-0.5 shadow-2xs",
+                              isChecked
+                                ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400 placeholder:text-emerald-100"
+                                : currentCal > 0
+                                ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-700"
+                                : "bg-slate-50/60 border-slate-200 dark:bg-slate-800/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800",
+                              !isEditable && "opacity-55 cursor-not-allowed"
+                            )}
+                            title={
+                              currentCal > 0
+                                ? `${currentCal} kcal (${currentCal > 2400 ? 'Surplus Met >2400' : 'Under 2400 Target'})`
+                                : isEditable ? 'Enter calories (Target: > 2400 kcal)' : 'Day locked'
+                            }
+                          />
+                        </td>
+                      );
+                    }
+
+                    // 2. Special Case: Protein Habit Input (target >= 80g)
+                    if (isProteinHabit) {
+                      const currentProt = metricsMap?.[day]?.protein || 0;
+                      return (
+                        <td
+                          key={day}
+                          className={cn(
+                            "w-[34px] min-w-[34px] p-0.5 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+                            isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isSunday ? "dark:bg-amber-950/10" : ""
+                          )}
+                        >
+                          <input
+                            type="number"
+                            min={0}
+                            max={500}
+                            step={5}
+                            placeholder="g"
+                            disabled={!isEditable}
+                            defaultValue={currentProt > 0 ? currentProt : ''}
+                            key={`prot-${day}-${currentProt}`}
+                            onBlur={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              if (val !== currentProt && onUpdateMetric) {
+                                onUpdateMetric({ date: dateStr, protein: val });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            className={cn(
+                              "w-[30px] h-6 text-[9px] font-black text-center rounded transition-all border outline-none px-0.5 shadow-2xs",
+                              isChecked
+                                ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400 placeholder:text-emerald-100"
+                                : currentProt > 0
+                                ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-700"
+                                : "bg-slate-50/60 border-slate-200 dark:bg-slate-800/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800",
+                              !isEditable && "opacity-55 cursor-not-allowed"
+                            )}
+                            title={
+                              currentProt > 0
+                                ? `${currentProt}g (${currentProt >= 80 ? 'Target Met ≥80g' : 'Under 80g Target'})`
+                                : isEditable ? 'Enter protein in grams (Target: ≥ 80g)' : 'Day locked'
+                            }
+                          />
+                        </td>
+                      );
+                    }
+
+                    // 3. Special Case: Workout / Rest Habit Dropdown
+                    if (isWorkoutHabit) {
+                      const workoutStatus = metricsMap?.[day]?.workoutStatus || (isChecked ? 'workout' : '');
+
+                      return (
+                        <td
+                          key={day}
+                          className={cn(
+                            "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+                            isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isSunday ? "dark:bg-amber-950/10" : ""
+                          )}
+                        >
+                          {isEditable ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border cursor-pointer outline-none shadow-2xs",
+                                    workoutStatus === 'workout'
+                                      ? "bg-emerald-500 text-white border-emerald-600 dark:bg-emerald-500 dark:text-white dark:border-emerald-400 dark:shadow-[0_0_8px_rgba(16,185,129,0.35)]"
+                                      : workoutStatus === 'rest'
+                                      ? "bg-slate-400 dark:bg-slate-600 text-white border-slate-500 dark:border-slate-500"
+                                      : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80"
+                                  )}
+                                  title={
+                                    workoutStatus === 'workout'
+                                      ? 'Workout Day (Click to change)'
+                                      : workoutStatus === 'rest'
+                                      ? 'Rest Day (Counts as completed task. Click to change)'
+                                      : 'Click to select Workout or Rest Day'
+                                  }
+                                >
+                                  {workoutStatus === 'workout' && <Dumbbell className="h-3.5 w-3.5 stroke-[2.5]" />}
+                                  {workoutStatus === 'rest' && <Moon className="h-3.5 w-3.5 stroke-[2.5]" />}
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="center" className="w-36 p-1 text-xs z-50">
+                                <DropdownMenuItem
+                                  onClick={() => onUpdateMetric && onUpdateMetric({ date: dateStr, workoutStatus: 'workout' })}
+                                  className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold cursor-pointer py-1.5"
+                                >
+                                  <Dumbbell className="h-3.5 w-3.5" />
+                                  <span>Workout (Green)</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => onUpdateMetric && onUpdateMetric({ date: dateStr, workoutStatus: 'rest' })}
+                                  className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer py-1.5"
+                                >
+                                  <Moon className="h-3.5 w-3.5 text-slate-400" />
+                                  <span>Rest Day (Grey)</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => onUpdateMetric && onUpdateMetric({ date: dateStr, workoutStatus: 'none' })}
+                                  className="flex items-center gap-2 text-slate-400 hover:text-rose-500 cursor-pointer text-[11px] py-1 border-t border-slate-100 dark:border-slate-800 mt-1"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  <span>Skip / Clear</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : (
+                            <div
+                              className={cn(
+                                "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border opacity-55 saturate-[0.85] cursor-not-allowed",
+                                workoutStatus === 'workout'
+                                  ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400"
+                                  : workoutStatus === 'rest'
+                                  ? "bg-slate-400 dark:bg-slate-600 text-white border-slate-500 dark:border-slate-500"
+                                  : "border-slate-250 bg-slate-50/50 dark:bg-slate-800/80 dark:border-slate-700"
+                              )}
+                              title="This day is locked."
+                            >
+                              {workoutStatus === 'workout' && <Dumbbell className="h-3.5 w-3.5 stroke-[2.5]" />}
+                              {workoutStatus === 'rest' && <Moon className="h-3.5 w-3.5 stroke-[2.5]" />}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    }
+
+                    // 4. Default Habit Checkbox (with Lead Generation & Cold Call Safeguards)
                     return (
                       <td
                         key={day}
                         onClick={() => {
                           if (!isEditable) return;
+
+                          // Validation checks for Lead generation and Coldcall habits
+                          if (!isChecked) {
+                            if (isLeadHabit) {
+                              const count = dailyLeadActivity?.leadsByDay?.[day] || 0;
+                              if (count === 0) {
+                                toast.error(`Cannot check 'Lead generation': No new leads added for ${dateStr}. Please add at least 1 lead in Leads first.`);
+                                return;
+                              }
+                            }
+                            if (isColdCallHabit) {
+                              const count = dailyLeadActivity?.callsByDay?.[day] || 0;
+                              if (count === 0) {
+                                toast.error(`Cannot check 'Coldcall / Practice': No cold calls logged for ${dateStr}. Please log at least 1 call in Leads first.`);
+                                return;
+                              }
+                            }
+                          }
+
                           onToggleHabit(hId, day, dateStr, isChecked);
                         }}
                         title={
@@ -355,15 +570,27 @@ export default function HabitGrid({
         </table>
       </div>
 
-      {/* Legend: explains which cells can still be changed */}
+      {/* Legend: explains cells, workout options, and locked status */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
         <span className="flex items-center gap-1.5">
           <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" strokeWidth={3} />
           Completed
         </span>
         <span className="flex items-center gap-1.5">
+          <Dumbbell className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          Workout (Green)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Moon className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+          Rest Day (Grey - counts as completed task)
+        </span>
+        <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+          <UtensilsCrossed className="h-3 w-3 text-orange-500" />
+          Calories: &gt;2400 kcal | Protein: &ge;80g (auto-ticks)
+        </span>
+        <span className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm border border-slate-250 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/80" />
-          Not done
+          Not done / Skipped
         </span>
         {!isPastMonth && (
           <span className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">

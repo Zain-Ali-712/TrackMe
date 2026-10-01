@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import {
   getLeads,
   getAllLeads,
@@ -6,7 +6,8 @@ import {
   updateLead,
   deleteLead,
   getLeadStats,
-  getNicheStats
+  getNicheStats,
+  batchDeleteLeads
 } from '../controllers/lead.controller.js';
 
 const router = express.Router();
@@ -15,6 +16,7 @@ router.get('/stats', getLeadStats);
 router.get('/niche-stats', getNicheStats);
 router.get('/all', getAllLeads);
 router.get('/', getLeads);
+router.post('/batch-delete', batchDeleteLeads);
 router.post('/', createLead);
 router.put('/:id', updateLead);
 router.delete('/:id', deleteLead);

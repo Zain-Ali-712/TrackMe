@@ -104,6 +104,7 @@ export const fetchAllLeads = () => fetchAPI('/leads/all');
 export const createLead = (data: any) => fetchAPI('/leads', { method: 'POST', body: JSON.stringify(data) });
 export const updateLead = (id: string, data: any) => fetchAPI(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteLead = (id: string) => fetchAPI(`/leads/${id}`, { method: 'DELETE' });
+export const batchDeleteLeads = (ids: string[]) => fetchAPI('/leads/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) });
 export const fetchLeadStats = () => fetchAPI('/leads/stats');
 export const fetchNicheStats = (nicheId?: string, month?: string) => {
   const params = new URLSearchParams();
@@ -130,6 +131,12 @@ export const deleteHabit = (id: string) => fetchAPI(`/habits/${id}`, { method: '
 export const fetchMonthHabitData = (year: number, month: number) => fetchAPI(`/habits/month?year=${year}&month=${month}`);
 export const toggleHabitLog = (habitId: string, date: string, completed: boolean) => 
   fetchAPI('/habits/toggle', { method: 'POST', body: JSON.stringify({ habitId, date, completed }) });
-export const updateDailyMetric = (data: { date: string; sleepHours?: number; notes?: string }) =>
-  fetchAPI('/habits/metric', { method: 'POST', body: JSON.stringify(data) });
+export const updateDailyMetric = (data: {
+  date: string;
+  sleepHours?: number;
+  notes?: string;
+  calories?: number;
+  protein?: number;
+  workoutStatus?: string;
+}) => fetchAPI('/habits/metric', { method: 'POST', body: JSON.stringify(data) });
 

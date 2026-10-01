@@ -26,6 +26,7 @@ import HabitProgressGauge from '@/components/habits/HabitProgressGauge';
 import MajorHabitsGrid from '@/components/habits/MajorHabitsGrid';
 import HabitDailyChart from '@/components/habits/HabitDailyChart';
 import HabitScoreChart from '@/components/habits/HabitScoreChart';
+import NutritionFitnessSection from '@/components/habits/NutritionFitnessSection';
 import HabitFormDialog from '@/components/habits/HabitFormDialog';
 import toast from 'react-hot-toast';
 
@@ -193,6 +194,85 @@ export default function HabitsPage() {
       toast.success('Sleep hours updated');
     } catch (error) {
       toast.error('Failed to save sleep metric');
+    }
+  };
+
+  const handleUpdateMetric = async (updateData: {
+    date: string;
+    calories?: number;
+    protein?: number;
+    workoutStatus?: string;
+  }) => {
+    try {
+      await updateDailyMetric(updateData);
+      
+      const dayNum = parseInt(updateData.date.split('-')[2], 10);
+      setData((prev: any) => {
+        if (!prev) return prev;
+        const prevMetric = prev.metricsMap?.[dayNum] || {};
+        const updatedMetric = {
+          ...prevMetric,
+          ...(updateData.calories !== undefined && { calories: updateData.calories }),
+          ...(updateData.protein !== undefined && { protein: updateData.protein }),
+          ...(updateData.workoutStatus !== undefined && { workoutStatus: updateData.workoutStatus }),
+        };
+
+        const updatedMetricsMap = {
+          ...prev.metricsMap,
+          [dayNum]: updatedMetric
+        };
+
+        // Also update last7DaysNutrition for real-time reactivity
+        const updatedLast7 = (prev.last7DaysNutrition || []).map((d: any) => {
+          if (d.date === updateData.date) {
+            const cal = updateData.calories !== undefined ? updateData.calories : d.calories;
+            const prot = updateData.protein !== undefined ? updateData.protein : d.protein;
+            const ws = updateData.workoutStatus !== undefined ? updateData.workoutStatus : d.workoutStatus;
+            return {
+              ...d,
+              calories: cal,
+              protein: prot,
+              workoutStatus: ws,
+              isMetCalories: cal > 2400,
+              isMetProtein: prot >= 80
+            };
+          }
+          return d;
+        });
+
+        return {
+          ...prev,
+          metricsMap: updatedMetricsMap,
+          last7DaysNutrition: updatedLast7
+        };
+      });
+
+      // Reload full month data to refresh exact scores, counts, and logs in background
+      loadMonthData(selectedYear, selectedMonth);
+
+      if (updateData.calories !== undefined) {
+        if (updateData.calories > 2400) {
+          toast.success(`Calories surplus logged: ${updateData.calories} kcal (>2400 Target Met!)`);
+        } else if (updateData.calories > 0) {
+          toast(`Calories logged: ${updateData.calories} kcal (${2401 - updateData.calories} kcal to target)`, { icon: 'ℹ️' });
+        }
+      } else if (updateData.protein !== undefined) {
+        if (updateData.protein >= 80) {
+          toast.success(`Protein logged: ${updateData.protein}g (≥80g Target Met!)`);
+        } else if (updateData.protein > 0) {
+          toast(`Protein logged: ${updateData.protein}g (${80 - updateData.protein}g to target)`, { icon: 'ℹ️' });
+        }
+      } else if (updateData.workoutStatus) {
+        if (updateData.workoutStatus === 'workout') {
+          toast.success('Workout logged (+1 routine completed)');
+        } else if (updateData.workoutStatus === 'rest') {
+          toast.success('Rest day logged (+1 routine completed)');
+        } else {
+          toast('Workout / rest status cleared', { icon: '⚪' });
+        }
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update metric');
     }
   };
 
@@ -441,9 +521,11 @@ export default function HabitsPage() {
               metricsMap={data.metricsMap}
               eachHabitStats={data.eachHabitStats}
               dailyStats={data.dailyStats}
+              dailyLeadActivity={data.dailyLeadActivity}
               latestEditableDate={data.latestEditableDate}
               onToggleHabit={handleToggleHabit}
               onUpdateSleep={handleUpdateSleep}
+              onUpdateMetric={handleUpdateMetric}
               onEditHabit={(h) => { setEditingHabit(h); setIsFormOpen(true); }}
               onAddHabit={() => { setEditingHabit(null); setIsFormOpen(true); }}
             />
@@ -459,6 +541,9 @@ export default function HabitsPage() {
               data={data.dailyStats} 
             />
           </div>
+
+          {/* Section: Nutrition & Fitness Performance (7-Day Calories/Protein Chart + Workout vs Rest Days Table) */}
+          <NutritionFitnessSection data={data.last7DaysNutrition || []} />
         </>
       )}
 

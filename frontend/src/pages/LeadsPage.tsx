@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, X, Upload } from 'lucide-react';
+import { Search, Plus, X, Upload, RotateCcw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { fetchNiches, fetchLeads, updateLead, deleteLead, createLead, createNiche, updateNiche, deleteNiche, createAppointment } from '@/lib/api';
+import { fetchNiches, fetchLeads, updateLead, deleteLead, createLead, createNiche, updateNiche, deleteNiche, createAppointment, batchDeleteLeads } from '@/lib/api';
 import NicheTabBar from '@/components/leads/NicheTabBar';
 import LeadTable from '@/components/leads/LeadTable';
 import LeadFormDialog from '@/components/leads/LeadFormDialog';
@@ -36,6 +36,15 @@ export default function LeadsPage() {
   // Inline spreadsheet adding state
   const [isAddingLeadRow, setIsAddingLeadRow] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [lastImportedLeadIds, setLastImportedLeadIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('trackme_last_imported_leads');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isUndoingImport, setIsUndoingImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Dialog states for editing existing items
@@ -168,6 +177,7 @@ export default function LeadsPage() {
 
       let created = 0;
       let skipped = 0;
+      const newlyCreatedIds: string[] = [];
       for (const row of rows) {
         const lead: any = { niche: assignedNiche, status: 'New Lead', coldCalled: false };
         for (const [rawKey, val] of Object.entries(row)) {
@@ -179,12 +189,17 @@ export default function LeadsPage() {
         // Require at least a business name to create the lead
         if (!lead.businessName) { skipped++; continue; }
         try {
-          await createLead(lead);
+          const saved = await createLead(lead);
+          if (saved && saved._id) newlyCreatedIds.push(saved._id);
           created++;
         } catch { skipped++; }
       }
 
       if (created > 0) {
+        setLastImportedLeadIds(newlyCreatedIds);
+        try {
+          localStorage.setItem('trackme_last_imported_leads', JSON.stringify(newlyCreatedIds));
+        } catch {}
         toast.success(`${created} lead${created > 1 ? 's' : ''} imported successfully${skipped > 0 ? ` (${skipped} rows skipped — missing business name)` : ''}`);
         loadLeads();
       } else {
@@ -194,6 +209,26 @@ export default function LeadsPage() {
       toast.error(err?.message || 'Failed to import file');
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handleUndoLastImport = async () => {
+    if (!lastImportedLeadIds || lastImportedLeadIds.length === 0) return;
+    const count = lastImportedLeadIds.length;
+    const confirmed = window.confirm(`Are you sure you want to undo the last import? This will delete all ${count} leads created during that import.`);
+    if (!confirmed) return;
+
+    setIsUndoingImport(true);
+    try {
+      await batchDeleteLeads(lastImportedLeadIds);
+      toast.success(`Successfully undid last import (${count} leads removed)`);
+      setLastImportedLeadIds([]);
+      localStorage.removeItem('trackme_last_imported_leads');
+      loadLeads();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to undo import');
+    } finally {
+      setIsUndoingImport(false);
     }
   };
 
@@ -321,6 +356,20 @@ export default function LeadsPage() {
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             {isImporting ? 'Importing...' : 'Import Excel'}
           </Button>
+
+          {/* Undo Last Import Button */}
+          {lastImportedLeadIds.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleUndoLastImport}
+              disabled={isUndoingImport || isImporting}
+              className="w-full sm:w-auto h-8 px-3 text-xs font-semibold rounded-lg border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-300 transition-colors"
+              title={`Undo last import (${lastImportedLeadIds.length} leads)`}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              {isUndoingImport ? 'Undoing...' : `Undo Import (${lastImportedLeadIds.length})`}
+            </Button>
+          )}
 
           {isAddingLeadRow ? (
             <Button

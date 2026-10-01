@@ -27,28 +27,31 @@ export default function LeadFormDialog({ open, onClose, onSubmit, lead, nicheId 
   });
 
   useEffect(() => {
-    if (lead) {
-      setFormData({
-        businessName: lead.businessName || '',
-        personName: lead.personName || '',
-        contact: lead.contact || '',
-        email: lead.email || '',
-        website: lead.website || '',
-        location: lead.location || '',
-        status: lead.status || 'New Lead',
-        notes: lead.notes || ''
-      });
-    } else {
-      setFormData({
-        businessName: '',
-        personName: '',
-        contact: '',
-        email: '',
-        website: '',
-        location: '',
-        status: 'New Lead',
-        notes: ''
-      });
+    if (open) {
+      if (lead) {
+        setFormData({
+          businessName: lead.businessName || '',
+          personName: lead.personName || '',
+          contact: lead.contact || '',
+          email: lead.email || '',
+          website: lead.website || '',
+          location: lead.location || '',
+          status: lead.status || 'New Lead',
+          notes: lead.notes || ''
+        });
+      } else {
+        // Always reset to empty when opening for a new lead
+        setFormData({
+          businessName: '',
+          personName: '',
+          contact: '',
+          email: '',
+          website: '',
+          location: '',
+          status: 'New Lead',
+          notes: ''
+        });
+      }
     }
   }, [lead, open]);
 
