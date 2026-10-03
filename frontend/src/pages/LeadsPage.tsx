@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, X, Upload, RotateCcw } from 'lucide-react';
+import { Search, Plus, X, Upload, RotateCcw, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchNiches, fetchLeads, updateLead, deleteLead, createLead, createNiche, updateNiche, deleteNiche, createAppointment, batchDeleteLeads } from '@/lib/api';
@@ -232,6 +232,69 @@ export default function LeadsPage() {
     }
   };
 
+  // Export currently visible leads (filtered by niche + status + search) to Excel
+  const handleExcelExport = async () => {
+    if (filteredLeads.length === 0) {
+      toast.error('No leads to export with the current filters');
+      return;
+    }
+
+    try {
+      // Load SheetJS from CDN (same as import — cached after first load)
+      const XLSX: any = await new Promise((resolve, reject) => {
+        if ((window as any).XLSX) { resolve((window as any).XLSX); return; }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.onload = () => resolve((window as any).XLSX);
+        script.onerror = () => reject(new Error('Failed to load SheetJS'));
+        document.head.appendChild(script);
+      });
+
+      // Build rows — clean human-readable columns
+      const rows = filteredLeads.map((lead, idx) => ({
+        '#': idx + 1,
+        'Business Name': lead.businessName || '',
+        'Person Name': lead.personName || '',
+        'Phone': lead.contact || '',
+        'Email': lead.email || '',
+        'Location': lead.location || '',
+        'Website': lead.website || '',
+        'Status': lead.status || '',
+        'Cold Called': lead.coldCalled ? 'Yes' : 'No',
+        'Notes': (() => {
+          try {
+            const parsed = JSON.parse(lead.notes || '[]');
+            if (Array.isArray(parsed)) return parsed.map((n: any) => n.text).join(' | ');
+          } catch {}
+          return lead.notes || '';
+        })(),
+        'Created At': lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      // Auto column widths
+      const colWidths = Object.keys(rows[0] || {}).map(key => ({
+        wch: Math.max(key.length, ...rows.map(r => String((r as any)[key] || '').length), 10)
+      }));
+      worksheet['!cols'] = colWidths;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads');
+
+      // Build filename from active filters
+      const nicheName = activeNicheId && activeNicheId !== 'all'
+        ? (niches.find(n => n._id === activeNicheId)?.name || 'Niche')
+        : 'All Niches';
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = `TrackMe_${nicheName}_${activeStatus}_${date}.xlsx`.replace(/\s+/g, '_');
+
+      XLSX.writeFile(workbook, filename);
+      toast.success(`Exported ${filteredLeads.length} lead${filteredLeads.length > 1 ? 's' : ''} to ${filename}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Export failed');
+    }
+  };
+
 
   const handleUpdateLeadInline = async (id: string, updates: any) => {
     try {
@@ -355,6 +418,18 @@ export default function LeadsPage() {
           >
             <Upload className="h-3.5 w-3.5 mr-1.5" />
             {isImporting ? 'Importing...' : 'Import Excel'}
+          </Button>
+
+          {/* Export visible leads to Excel */}
+          <Button
+            variant="outline"
+            onClick={handleExcelExport}
+            disabled={filteredLeads.length === 0}
+            className="w-full sm:w-auto h-8 px-3 text-xs font-semibold rounded-lg border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:border-emerald-300 transition-colors disabled:opacity-40"
+            title={filteredLeads.length > 0 ? `Export ${filteredLeads.length} visible lead${filteredLeads.length > 1 ? 's' : ''} to Excel` : 'No leads to export'}
+          >
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export ({filteredLeads.length})
           </Button>
 
           {/* Undo Last Import Button */}
