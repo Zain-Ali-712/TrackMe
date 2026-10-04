@@ -6,21 +6,23 @@ import {
   calculateDailyHabitScore,
   assignHabitsToRules,
   STREAK_THRESHOLD,
-  MAX_DAILY_SCORE
+  MAX_DAILY_SCORE,
+  computeWeeklyWorstDayExemptions,
+  computeStreakCount
 } from '../lib/habitScoring.js';
 import { isDateEditable, getLatestEditableDate, toDateString } from '../lib/dateRules.js';
 
 // Default 22 starter habits based on user schedule
 export const DEFAULT_HABITS = [
-  { name: 'Wake up early (4)', icon: 'Clock', color: '#f59e0b', order: 1 },
+  { name: 'Wake up 4Am', icon: 'Clock', color: '#f59e0b', order: 1 },
   { name: 'Workout / Rest', icon: 'Dumbbell', color: '#10b981', order: 2 },
   { name: 'Morning shower', icon: 'Droplets', color: '#06b6d4', order: 3 },
-  { name: 'Namaz / dua', icon: 'HeartHandshake', color: '#8b5cf6', order: 4 },
-  { name: 'Coldcall / Practice', icon: 'PhoneCall', color: '#10b981', order: 5 },
-  { name: 'Lead generation', icon: 'Users', color: '#3b82f6', order: 6 },
-  { name: 'Job Search', icon: 'Briefcase', color: '#6366f1', order: 7 },
-  { name: 'Scholarships', icon: 'GraduationCap', color: '#a855f7', order: 8 },
-  { name: 'LinkedIn hunt', icon: 'Share2', color: '#0284c7', order: 9 },
+  { name: 'Brush Teeth', icon: 'Sparkles', color: '#0ea5e9', order: 4 },
+  { name: 'Namaz / dua', icon: 'HeartHandshake', color: '#8b5cf6', order: 5 },
+  { name: 'Coldcall / Practice', icon: 'PhoneCall', color: '#10b981', order: 6 },
+  { name: 'Lead generation', icon: 'Users', color: '#3b82f6', order: 7 },
+  { name: 'LinkedIn Setup', icon: 'Share2', color: '#0284c7', order: 8 },
+  { name: 'Job / Scholarships', icon: 'Briefcase', color: '#6366f1', order: 9 },
   { name: 'FYP Development', icon: 'Code2', color: '#ec4899', order: 10 },
   { name: 'Project Dev', icon: 'Laptop', color: '#3b82f6', order: 11 },
   { name: 'Book Reading', icon: 'BookOpen', color: '#f59e0b', order: 12 },
@@ -227,7 +229,7 @@ export const getMonthData = async (req, res) => {
     });
 
     const weekdaysShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-    const dailyStats = [];
+    const dailyStatsDraft = [];
     let totalCompletedMonth = 0;
 
     for (let day = 1; day <= daysInMonth; day++) {
@@ -241,8 +243,9 @@ export const getMonthData = async (req, res) => {
       });
 
       totalCompletedMonth += checkedNames.length;
+      const score = calculateDailyHabitScore(checkedNames);
 
-      dailyStats.push({
+      dailyStatsDraft.push({
         day,
         date: dateStr,
         weekday: weekdaysShort[dayDate.getDay()],
@@ -250,36 +253,51 @@ export const getMonthData = async (req, res) => {
         completedCount: checkedNames.length,
         totalHabits: habits.length,
         percent: habits.length > 0 ? Math.round((checkedNames.length / habits.length) * 100) : 0,
-        score: calculateDailyHabitScore(checkedNames),
+        score,
+        isBelowGoal: score < STREAK_THRESHOLD,
         sleepHours: (metricsMap[day] || {}).sleepHours || 0
       });
     }
+
+    const todayDay = now.getDate();
+    const endDayForStreak = isCurrentMonth ? todayDay : daysInMonth;
+    const exemptDays = computeWeeklyWorstDayExemptions(dailyStatsDraft, year, month, endDayForStreak);
+
+    // Final dailyStats with isExempt flag
+    const dailyStats = dailyStatsDraft.map((ds) => ({
+      ...ds,
+      isExempt: exemptDays.has(ds.day)
+    }));
 
     const totalPossible = habits.length * daysInMonth;
     const monthlyProgressPercent = totalPossible > 0
       ? Number(((totalCompletedMonth / totalPossible) * 100).toFixed(1))
       : 0;
 
-    const todayDay = now.getDate();
     const todayStat = isCurrentMonth ? dailyStats[todayDay - 1] || null : null;
 
-    // Streak: a day >= threshold extends it, Sunday never breaks it, any other
-    // day below the threshold resets it to zero. Today is not counted yet when
-    // it hasn't reached the threshold, so an unfinished day never costs a streak.
-    let streakCount = 0;
-    const endDayForStreak = isCurrentMonth ? todayDay : daysInMonth;
+    // Dynamic weekly worst-day streak calculation
+    const streakCount = computeStreakCount(dailyStats, isCurrentMonth, todayDay, year, month);
 
-    for (let day = 1; day <= endDayForStreak; day++) {
-      const dayStat = dailyStats[day - 1];
-      if (!dayStat) continue;
-
-      if (dayStat.score >= STREAK_THRESHOLD) {
-        streakCount++;
-      } else if (dayStat.isSunday) {
-        // Sunday is exempt: below-threshold days do not break the streak.
-      } else if (day !== endDayForStreak || !isCurrentMonth) {
-        streakCount = 0;
-      }
+    // Monthly nutrition & workout data (for the entire selected month)
+    const monthNutritionData = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${monthPrefix}-${String(day).padStart(2, '0')}`;
+      const d = new Date(year, month - 1, day);
+      const m = metricsMap[day] || {};
+      const cal = m.calories || 0;
+      const prot = m.protein || 0;
+      const ws = m.workoutStatus || '';
+      monthNutritionData.push({
+        date: dateStr,
+        day,
+        weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()],
+        calories: cal,
+        protein: prot,
+        workoutStatus: ws,
+        isMetCalories: cal > 2400,
+        isMetProtein: prot >= 80
+      });
     }
 
     const elapsedDays = isCurrentMonth ? Math.max(1, todayDay) : daysInMonth;
@@ -346,6 +364,7 @@ export const getMonthData = async (req, res) => {
         callsByDay
       },
       last7DaysNutrition,
+      monthNutritionData,
       overallStats: {
         totalPossible,
         totalCompleted: totalCompletedMonth,

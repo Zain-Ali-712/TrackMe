@@ -121,18 +121,21 @@ export default function HabitsPage() {
     const updatedDailyStats = data.dailyStats.map((ds: any) => {
       const match = updatedDailyScores.find(s => s.day === ds.day);
       const newCount = ds.day === day ? ds.completedCount + (newVal ? 1 : -1) : ds.completedCount;
+      const score = match ? match.score : 0;
       return {
         ...ds,
         completedCount: Math.max(0, newCount),
         percent: data.habits.length > 0 ? Math.round((Math.max(0, newCount) / data.habits.length) * 100) : 0,
-        score: match ? match.score : 0,
+        score,
+        isBelowGoal: score < STREAK_THRESHOLD,
+        isExempt: match ? match.isExempt : false,
         isSunday: match ? match.isSunday : false
       };
     });
 
     const isCurrentMonth = data.overallStats.isCurrentMonth;
     const todayDay = data.overallStats.todayDay;
-    const newStreak = computeStreakCount(updatedDailyStats, isCurrentMonth, todayDay || 1);
+    const newStreak = computeStreakCount(updatedDailyStats, isCurrentMonth, todayDay || 1, selectedYear, selectedMonth);
     const todayMatch = updatedDailyStats.find((d: any) => d.day === todayDay);
     const newTodayScore = todayMatch ? todayMatch.score : 0;
 
@@ -222,8 +225,25 @@ export default function HabitsPage() {
           [dayNum]: updatedMetric
         };
 
-        // Also update last7DaysNutrition for real-time reactivity
+        // Also update last7DaysNutrition and monthNutritionData for real-time reactivity
         const updatedLast7 = (prev.last7DaysNutrition || []).map((d: any) => {
+          if (d.date === updateData.date) {
+            const cal = updateData.calories !== undefined ? updateData.calories : d.calories;
+            const prot = updateData.protein !== undefined ? updateData.protein : d.protein;
+            const ws = updateData.workoutStatus !== undefined ? updateData.workoutStatus : d.workoutStatus;
+            return {
+              ...d,
+              calories: cal,
+              protein: prot,
+              workoutStatus: ws,
+              isMetCalories: cal > 2400,
+              isMetProtein: prot >= 80
+            };
+          }
+          return d;
+        });
+
+        const updatedMonthData = (prev.monthNutritionData || []).map((d: any) => {
           if (d.date === updateData.date) {
             const cal = updateData.calories !== undefined ? updateData.calories : d.calories;
             const prot = updateData.protein !== undefined ? updateData.protein : d.protein;
@@ -243,7 +263,8 @@ export default function HabitsPage() {
         return {
           ...prev,
           metricsMap: updatedMetricsMap,
-          last7DaysNutrition: updatedLast7
+          last7DaysNutrition: updatedLast7,
+          monthNutritionData: updatedMonthData
         };
       });
 
@@ -542,8 +563,13 @@ export default function HabitsPage() {
             />
           </div>
 
-          {/* Section: Nutrition & Fitness Performance (7-Day Calories/Protein Chart + Workout vs Rest Days Table) */}
-          <NutritionFitnessSection data={data.last7DaysNutrition || []} />
+          {/* Section: Nutrition & Fitness Performance (7-Day / Monthly Calories/Protein Chart + Monthly Workout vs Rest Days Record) */}
+          <NutritionFitnessSection 
+            data={data.last7DaysNutrition || []} 
+            monthData={data.monthNutritionData || []}
+            monthName={MONTH_NAMES[selectedMonth - 1]}
+            year={selectedYear}
+          />
         </>
       )}
 

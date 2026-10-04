@@ -1,8 +1,8 @@
-import React from 'react';
-import { Check, Edit2, Plus, Flame, Lock, Dumbbell, Moon, X, UtensilsCrossed, Activity } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Edit2, Plus, Flame, Lock, Dumbbell, Moon, X, UtensilsCrossed, Activity, Sparkles, ShieldCheck } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn, getHabitIcon } from '@/lib/utils';
-import { STREAK_THRESHOLD } from '@/lib/habitScoring';
+import { STREAK_THRESHOLD, getHabitWeight, isPartnerFulfilledHabit } from '@/lib/habitScoring';
 import toast from 'react-hot-toast';
 
 interface HabitGridProps {
@@ -22,6 +22,174 @@ interface HabitGridProps {
   onUpdateMetric?: (data: { date: string; calories?: number; protein?: number; workoutStatus?: string }) => void;
   onEditHabit: (habit: any) => void;
   onAddHabit: () => void;
+}
+
+interface MetricCellProps {
+  day: number;
+  dateStr: string;
+  currentVal: number;
+  targetThreshold: number;
+  targetComparison: 'greater' | 'greater_equal';
+  unit: string;
+  isMet: boolean;
+  isEditable: boolean;
+  isToday: boolean;
+  isBelowGoal: boolean;
+  label: string;
+  icon: React.ReactNode;
+  presets: number[];
+  onSave: (val: number) => void;
+}
+
+function MetricInputCell({
+  day,
+  currentVal,
+  targetThreshold,
+  targetComparison,
+  unit,
+  isMet,
+  isEditable,
+  isToday,
+  isBelowGoal,
+  label,
+  icon,
+  presets,
+  onSave
+}: MetricCellProps) {
+  const [valInput, setValInput] = useState(currentVal > 0 ? String(currentVal) : '');
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setValInput(currentVal > 0 ? String(currentVal) : '');
+  }, [currentVal]);
+
+  const handleCommit = (num: number) => {
+    onSave(num);
+    setIsOpen(false);
+  };
+
+  const formattedDisplay = currentVal > 0 
+    ? (currentVal >= 1000 ? `${(currentVal / 1000).toFixed(1)}k` : `${currentVal}`)
+    : '';
+
+  const tooltipText = currentVal > 0
+    ? `${currentVal}${unit} (${isMet ? 'Target Met!' : 'Under Target'}) — Click to edit`
+    : isEditable
+    ? `Click to enter ${label} (Target: ${targetComparison === 'greater' ? '>' : '≥'} ${targetThreshold}${unit})`
+    : 'Day locked';
+
+  return (
+    <td
+      className={cn(
+        "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+        isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isBelowGoal ? "bg-rose-50/25 dark:bg-rose-950/10" : ""
+      )}
+    >
+      {isEditable ? (
+        <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border cursor-pointer outline-none shadow-2xs relative",
+                isMet
+                  ? "bg-emerald-500 text-white border-emerald-600 dark:bg-emerald-500 dark:text-white dark:border-emerald-400 dark:shadow-[0_0_8px_rgba(16,185,129,0.35)]"
+                  : currentVal > 0
+                  ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700"
+                  : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80"
+              )}
+              title={tooltipText}
+            >
+              {isMet ? (
+                <Check className="h-3.5 w-3.5 stroke-[3]" />
+              ) : currentVal > 0 ? (
+                <span className="text-[9px] font-black leading-none">{formattedDisplay}</span>
+              ) : null}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" className="w-48 p-2.5 text-xs z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl">
+            <div className="flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800 font-bold text-slate-800 dark:text-slate-100 text-[11px]">
+              {icon}
+              <span>{label}</span>
+              <span className="text-[10px] text-slate-400 font-normal ml-auto">Day {day}</span>
+            </div>
+
+            <div className="pt-2 space-y-2">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  autoFocus
+                  placeholder={`Count in ${unit}`}
+                  value={valInput}
+                  onChange={(e) => setValInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const num = parseFloat(valInput) || 0;
+                      handleCommit(num);
+                    }
+                  }}
+                  className="w-full h-7 px-2 text-xs rounded border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleCommit(parseFloat(valInput) || 0)}
+                  className="px-2 h-7 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded font-bold text-[11px] shrink-0"
+                >
+                  Save
+                </button>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="flex flex-wrap items-center gap-1 pt-1">
+                <span className="text-[9px] font-semibold text-slate-400 mr-0.5">Quick:</span>
+                {presets.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => {
+                      setValInput(String(p));
+                      handleCommit(p);
+                    }}
+                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/60 dark:hover:text-emerald-300 transition-colors"
+                  >
+                    {p}{unit}
+                  </button>
+                ))}
+              </div>
+
+              {currentVal > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleCommit(0)}
+                  className="w-full text-center text-[10px] text-rose-500 hover:text-rose-600 font-semibold pt-1 block cursor-pointer"
+                >
+                  Clear entry
+                </button>
+              )}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <div
+          className={cn(
+            "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border opacity-55 saturate-[0.85] cursor-not-allowed",
+            isMet
+              ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400"
+              : currentVal > 0
+              ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700"
+              : "border-slate-250 bg-slate-50/50 dark:bg-slate-800/80 dark:border-slate-700"
+          )}
+          title="This day is locked."
+        >
+          {isMet ? (
+            <Check className="h-3.5 w-3.5 stroke-[3]" />
+          ) : currentVal > 0 ? (
+            <span className="text-[9px] font-black leading-none">{formattedDisplay}</span>
+          ) : null}
+        </div>
+      )}
+    </td>
+  );
 }
 
 export default function HabitGrid({
@@ -124,6 +292,10 @@ export default function HabitGrid({
                 const weekday = weekdaysShort[dayDate.getDay()];
                 const isToday = isCurrentMonth && day === todayDay;
                 const isSunday = dayDate.getDay() === 0;
+                const dayStat = dailyStats[day - 1];
+                const isPastOrToday = isPastMonth || (isCurrentMonth && day <= todayDay);
+                const isBelowGoal = isPastOrToday && dayStat && dayStat.score < STREAK_THRESHOLD;
+                const isExempt = dayStat?.isExempt;
 
                 return (
                   <th
@@ -132,23 +304,37 @@ export default function HabitGrid({
                       "min-w-[34px] w-[34px] p-1 font-bold transition-colors border-r border-slate-200/50 dark:border-slate-800",
                       isToday
                         ? "bg-blue-50/90 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400"
+                        : isBelowGoal
+                        ? isExempt
+                          ? "bg-amber-50/60 dark:bg-amber-950/25 text-amber-700 dark:text-amber-400"
+                          : "bg-rose-50/70 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400"
                         : isSunday
                         ? "bg-amber-50/40 dark:bg-amber-950/25 text-amber-700 dark:text-amber-400"
                         : "dark:text-slate-400"
                     )}
+                    title={
+                      isBelowGoal
+                        ? isExempt
+                          ? `Day ${day} (${dayStat?.score || 0}%): Weekly Lowest Day — EXEMPT from breaking streak`
+                          : `Day ${day} (${dayStat?.score || 0}%): Below ${STREAK_THRESHOLD}% goal`
+                        : undefined
+                    }
                   >
                     <div className="flex flex-col items-center">
                       <span className={cn(
-                        "text-[9px] font-semibold uppercase tracking-tight",
-                        isSunday ? "text-amber-600 dark:text-amber-400 font-bold" : "opacity-75 dark:text-slate-400"
+                        "text-[9px] font-semibold uppercase tracking-tight flex items-center gap-0.5",
+                        isBelowGoal && !isExempt ? "text-rose-600 dark:text-rose-400 font-extrabold" : isSunday ? "text-amber-600 dark:text-amber-400 font-bold" : "opacity-75 dark:text-slate-400"
                       )}>
                         {weekday}
+                        {isExempt && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" title="Weekly Exempt Day" />}
                       </span>
                       <span
                         className={cn(
                           "text-xs tabular-nums mt-0.5 w-5 h-5 rounded-full flex items-center justify-center font-bold",
                           isToday 
                             ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black shadow-xs" 
+                            : isBelowGoal && !isExempt
+                            ? "text-rose-600 dark:text-rose-400 bg-rose-100/60 dark:bg-rose-900/40 font-black"
                             : "dark:text-slate-200"
                         )}
                       >
@@ -187,7 +373,7 @@ export default function HabitGrid({
 
               return (
                 <tr key={hId} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 group transition-colors">
-                  {/* Sticky Habit Name Column with Lucide Icon (NO EMOJIS) */}
+                  {/* Sticky Habit Name Column with Lucide Icon (NO EMOJIS) + Percentage Weightage */}
                   <td className="sticky left-0 z-20 bg-white group-hover:bg-slate-50/90 dark:bg-slate-900 dark:group-hover:bg-slate-800/90 px-3.5 py-2 font-medium text-slate-900 dark:text-white border-r border-slate-200 dark:border-slate-800 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 truncate">
@@ -201,13 +387,22 @@ export default function HabitGrid({
                           {habit.name}
                         </span>
                       </div>
-                      <button
-                        onClick={() => onEditHabit(habit)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-opacity"
-                        title="Edit Habit"
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Percentage weightage badge aligned on the right */}
+                        <span 
+                          className="px-1.5 py-0.5 rounded text-[10px] font-extrabold tracking-tight bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 tabular-nums"
+                          title={`${getHabitWeight(habit.name)}% daily score weightage`}
+                        >
+                          {getHabitWeight(habit.name)}%
+                        </span>
+                        <button
+                          onClick={() => onEditHabit(habit)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-opacity"
+                          title="Edit Habit"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   </td>
 
@@ -218,104 +413,59 @@ export default function HabitGrid({
                     const isSunday = new Date(year, month - 1, day).getDay() === 0;
                     const dateStr = dateFor(day);
                     const isEditable = !isPastMonth && isEditableDay(dateStr);
+                    const isPastOrToday = isPastMonth || (isCurrentMonth && day <= todayDay);
+                    const dayStat = dailyStats[day - 1];
+                    const isBelowGoal = isPastOrToday && Boolean(dayStat && dayStat.score < STREAK_THRESHOLD);
 
-                    // 1. Special Case: Calories Habit Input (target > 2400 kcal)
+                    // 1. Special Case: Calories Habit Input (> 2400 kcal)
                     if (isCalorieHabit) {
                       const currentCal = metricsMap?.[day]?.calories || 0;
                       return (
-                        <td
+                        <MetricInputCell
                           key={day}
-                          className={cn(
-                            "w-[34px] min-w-[34px] p-0.5 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
-                            isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isSunday ? "dark:bg-amber-950/10" : ""
-                          )}
-                        >
-                          <input
-                            type="number"
-                            min={0}
-                            max={9999}
-                            step={50}
-                            placeholder="cal"
-                            disabled={!isEditable}
-                            defaultValue={currentCal > 0 ? currentCal : ''}
-                            key={`cal-${day}-${currentCal}`}
-                            onBlur={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              if (val !== currentCal && onUpdateMetric) {
-                                onUpdateMetric({ date: dateStr, calories: val });
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                (e.target as HTMLInputElement).blur();
-                              }
-                            }}
-                            className={cn(
-                              "w-[30px] h-6 text-[9px] font-black text-center rounded transition-all border outline-none px-0.5 shadow-2xs",
-                              isChecked
-                                ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400 placeholder:text-emerald-100"
-                                : currentCal > 0
-                                ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-700"
-                                : "bg-slate-50/60 border-slate-200 dark:bg-slate-800/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800",
-                              !isEditable && "opacity-55 cursor-not-allowed"
-                            )}
-                            title={
-                              currentCal > 0
-                                ? `${currentCal} kcal (${currentCal > 2400 ? 'Surplus Met >2400' : 'Under 2400 Target'})`
-                                : isEditable ? 'Enter calories (Target: > 2400 kcal)' : 'Day locked'
-                            }
-                          />
-                        </td>
+                          day={day}
+                          dateStr={dateStr}
+                          currentVal={currentCal}
+                          targetThreshold={2400}
+                          targetComparison="greater"
+                          unit=" kcal"
+                          isMet={isChecked || currentCal > 2400}
+                          isEditable={isEditable}
+                          isToday={isToday}
+                          isBelowGoal={isBelowGoal}
+                          label="Calories Surplus"
+                          icon={<UtensilsCrossed className="h-3.5 w-3.5 text-orange-500" />}
+                          presets={[2450, 2600, 2800, 3000]}
+                          onSave={(val) => {
+                            if (onUpdateMetric) onUpdateMetric({ date: dateStr, calories: val });
+                          }}
+                        />
                       );
                     }
 
-                    // 2. Special Case: Protein Habit Input (target >= 80g)
+                    // 2. Special Case: Protein Habit Input (≥ 80g)
                     if (isProteinHabit) {
                       const currentProt = metricsMap?.[day]?.protein || 0;
                       return (
-                        <td
+                        <MetricInputCell
                           key={day}
-                          className={cn(
-                            "w-[34px] min-w-[34px] p-0.5 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
-                            isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isSunday ? "dark:bg-amber-950/10" : ""
-                          )}
-                        >
-                          <input
-                            type="number"
-                            min={0}
-                            max={500}
-                            step={5}
-                            placeholder="g"
-                            disabled={!isEditable}
-                            defaultValue={currentProt > 0 ? currentProt : ''}
-                            key={`prot-${day}-${currentProt}`}
-                            onBlur={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              if (val !== currentProt && onUpdateMetric) {
-                                onUpdateMetric({ date: dateStr, protein: val });
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                (e.target as HTMLInputElement).blur();
-                              }
-                            }}
-                            className={cn(
-                              "w-[30px] h-6 text-[9px] font-black text-center rounded transition-all border outline-none px-0.5 shadow-2xs",
-                              isChecked
-                                ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400 placeholder:text-emerald-100"
-                                : currentProt > 0
-                                ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-700"
-                                : "bg-slate-50/60 border-slate-200 dark:bg-slate-800/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800",
-                              !isEditable && "opacity-55 cursor-not-allowed"
-                            )}
-                            title={
-                              currentProt > 0
-                                ? `${currentProt}g (${currentProt >= 80 ? 'Target Met ≥80g' : 'Under 80g Target'})`
-                                : isEditable ? 'Enter protein in grams (Target: ≥ 80g)' : 'Day locked'
-                            }
-                          />
-                        </td>
+                          day={day}
+                          dateStr={dateStr}
+                          currentVal={currentProt}
+                          targetThreshold={80}
+                          targetComparison="greater_equal"
+                          unit="g"
+                          isMet={isChecked || currentProt >= 80}
+                          isEditable={isEditable}
+                          isToday={isToday}
+                          isBelowGoal={isBelowGoal}
+                          label="Protein Amount"
+                          icon={<Activity className="h-3.5 w-3.5 text-emerald-500" />}
+                          presets={[80, 90, 100, 120]}
+                          onSave={(val) => {
+                            if (onUpdateMetric) onUpdateMetric({ date: dateStr, protein: val });
+                          }}
+                        />
                       );
                     }
 
@@ -328,7 +478,7 @@ export default function HabitGrid({
                           key={day}
                           className={cn(
                             "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
-                            isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isSunday ? "dark:bg-amber-950/10" : ""
+                            isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : isBelowGoal ? "bg-rose-50/25 dark:bg-rose-950/10" : isSunday ? "dark:bg-amber-950/10" : ""
                           )}
                         >
                           {isEditable ? (
@@ -400,7 +550,9 @@ export default function HabitGrid({
                       );
                     }
 
-                    // 4. Default Habit Checkbox (with Lead Generation & Cold Call Safeguards)
+                    // 4. Default Habit Checkbox (with Grouped Partner Fulfilled & Lead Safeguards)
+                    const isPartnerFulfilled = !isChecked && isPartnerFulfilledHabit(habit.name, day, logsMap, habits);
+
                     return (
                       <td
                         key={day}
@@ -428,8 +580,12 @@ export default function HabitGrid({
                           onToggleHabit(hId, day, dateStr, isChecked);
                         }}
                         title={
-                          isEditable
-                            ? undefined
+                          isPartnerFulfilled
+                            ? 'Fulfilled via partner habit (Click to mark both completed)'
+                            : isChecked
+                            ? 'Completed'
+                            : isEditable
+                            ? 'Click to mark complete'
                             : isPastMonth
                             ? 'This month has passed. Habits can only be changed for today and yesterday.'
                             : dateStr > todayStr
@@ -440,6 +596,8 @@ export default function HabitGrid({
                           "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
                           isToday
                             ? "bg-blue-50/40 dark:bg-blue-950/20"
+                            : isBelowGoal
+                            ? "bg-rose-50/25 dark:bg-rose-950/10"
                             : isSunday
                             ? "dark:bg-amber-950/10"
                             : "",
@@ -460,11 +618,17 @@ export default function HabitGrid({
                             !isEditable && "opacity-55 saturate-[0.85]",
                             isChecked
                               ? "bg-emerald-500 text-white border-emerald-600 dark:bg-emerald-500 dark:text-white dark:border-emerald-400 dark:shadow-[0_0_8px_rgba(16,185,129,0.35)] scale-100"
+                              : isPartnerFulfilled
+                              ? "bg-slate-200/90 dark:bg-slate-700/70 border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-slate-400 shadow-2xs"
                               : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80",
                             !isEditable && "hover:border-slate-250 hover:bg-slate-50/50 dark:hover:bg-slate-800/80 dark:hover:border-slate-700"
                           )}
                         >
-                          {isChecked && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                          {isChecked ? (
+                            <Check className="h-3.5 w-3.5 stroke-[3]" />
+                          ) : isPartnerFulfilled ? (
+                            <Check className="h-3 w-3 stroke-[2.5] opacity-65 text-slate-500 dark:text-slate-300" />
+                          ) : null}
                         </div>
                       </td>
                     );
@@ -536,7 +700,9 @@ export default function HabitGrid({
               {dailyStats.map((stat) => {
                 const score = stat.score || 0;
                 const isMet = score >= STREAK_THRESHOLD;
-                const isSun = stat.isSunday;
+                const isExempt = stat.isExempt;
+                const isPastOrToday = isPastMonth || (isCurrentMonth && stat.day <= todayDay);
+                const isBelowGoal = isPastOrToday && !isMet;
 
                 return (
                   <td
@@ -545,11 +711,21 @@ export default function HabitGrid({
                       "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 text-[11px] tabular-nums font-extrabold",
                       isMet
                         ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/40"
-                        : isSun
-                        ? "text-amber-600 dark:text-amber-400 dark:bg-amber-950/20"
+                        : isBelowGoal
+                        ? isExempt
+                          ? "text-amber-600 dark:text-amber-400 bg-amber-50/60 dark:bg-amber-950/30"
+                          : "text-rose-600 dark:text-rose-400 bg-rose-50/70 dark:bg-rose-950/40"
                         : "text-slate-400 dark:text-slate-600"
                     )}
-                    title={isMet ? `Goal Met: ${score}% (Streak Active)` : isSun ? `Sunday: ${score}% (Streak Safe)` : `Score: ${score}%`}
+                    title={
+                      isMet
+                        ? `Goal Met: ${score}% (Streak Active)`
+                        : isBelowGoal
+                        ? isExempt
+                          ? `Exempt Day (${score}%): Lowest day of week — Streak preserved`
+                          : `Below 80% Goal (${score}%) — Streak broken`
+                        : `Score: ${score}%`
+                    }
                   >
                     {score > 0 ? `${score}%` : '-'}
                   </td>
