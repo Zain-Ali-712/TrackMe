@@ -260,8 +260,8 @@ export const getMonthData = async (req, res) => {
     }
 
     const todayDay = now.getDate();
-    const endDayForStreak = isCurrentMonth ? todayDay : daysInMonth;
-    const exemptDays = computeWeeklyWorstDayExemptions(dailyStatsDraft, year, month, endDayForStreak);
+    const endDayForExemptions = isCurrentMonth ? Math.max(0, todayDay - 1) : daysInMonth;
+    const exemptDays = computeWeeklyWorstDayExemptions(dailyStatsDraft, year, month, endDayForExemptions);
 
     // Final dailyStats with isExempt flag
     const dailyStats = dailyStatsDraft.map((ds) => ({

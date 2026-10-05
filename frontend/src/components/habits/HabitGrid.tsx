@@ -293,8 +293,8 @@ export default function HabitGrid({
                 const isToday = isCurrentMonth && day === todayDay;
                 const isSunday = dayDate.getDay() === 0;
                 const dayStat = dailyStats[day - 1];
-                const isPastOrToday = isPastMonth || (isCurrentMonth && day <= todayDay);
-                const isBelowGoal = isPastOrToday && dayStat && dayStat.score < STREAK_THRESHOLD;
+                const isPastDay = isPastMonth || (isCurrentMonth && day < todayDay);
+                const isBelowGoal = isPastDay && dayStat && dayStat.score < STREAK_THRESHOLD;
                 const isExempt = dayStat?.isExempt;
 
                 return (
@@ -413,9 +413,9 @@ export default function HabitGrid({
                     const isSunday = new Date(year, month - 1, day).getDay() === 0;
                     const dateStr = dateFor(day);
                     const isEditable = !isPastMonth && isEditableDay(dateStr);
-                    const isPastOrToday = isPastMonth || (isCurrentMonth && day <= todayDay);
+                    const isPastDay = isPastMonth || (isCurrentMonth && day < todayDay);
                     const dayStat = dailyStats[day - 1];
-                    const isBelowGoal = isPastOrToday && Boolean(dayStat && dayStat.score < STREAK_THRESHOLD);
+                    const isBelowGoal = isPastDay && Boolean(dayStat && dayStat.score < STREAK_THRESHOLD);
 
                     // 1. Special Case: Calories Habit Input (> 2400 kcal)
                     if (isCalorieHabit) {
@@ -701,8 +701,8 @@ export default function HabitGrid({
                 const score = stat.score || 0;
                 const isMet = score >= STREAK_THRESHOLD;
                 const isExempt = stat.isExempt;
-                const isPastOrToday = isPastMonth || (isCurrentMonth && stat.day <= todayDay);
-                const isBelowGoal = isPastOrToday && !isMet;
+                const isPastDay = isPastMonth || (isCurrentMonth && stat.day < todayDay);
+                const isBelowGoal = isPastDay && !isMet;
 
                 return (
                   <td

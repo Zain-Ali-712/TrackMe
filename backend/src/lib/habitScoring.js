@@ -43,19 +43,19 @@ export const SCORING_RULES = [
   { id: 'five_prayers',        weight: 5,  keywords: ['prayer'] },
   { id: 'namaz_dua',           weight: 3,  keywords: ['namaz', 'dua', 'salah', 'pray'] },
   { id: 'no_doom_scroll',      weight: 2,  keywords: ['doom', 'scroll'] },
-  { id: 'no_disrespecting',    weight: 2,  keywords: ['disrespect'] },
+  { id: 'no_disrespecting',    weight: 3,  keywords: ['disrespect'] },
   { id: 'no_movie_show',       weight: 2,  keywords: ['movie', 'show', 'series', 'netflix'] },
-  { id: 'sleep_on_time',       weight: 4,  keywords: ['sleep', 'bedtime'] },
+  { id: 'sleep_on_time',       weight: 3,  keywords: ['sleep', 'bedtime'] },
   { id: 'wake_up',             weight: 3,  keywords: ['wake'] },
   { id: 'workout',             weight: 10, keywords: ['workout', 'gym', 'training', 'exercise'] },
   { id: 'morning_shower',      weight: 2,  keywords: ['shower'] },
   { id: 'brush_teeth',         weight: 2,  keywords: ['brush', 'teeth', 'tooth'] },
   { id: 'book_reading',        weight: 5,  keywords: ['book', 'read'] },
-  { id: 'learning_videos',     weight: 4,  keywords: ['learning', 'video', 'course', 'tutorial'] },
-  { id: 'journaling',          weight: 2,  keywords: ['journal'] },
-  { id: 'writing_dreams',      weight: 2,  keywords: ['dream'] },
+  { id: 'learning_videos',     weight: 3,  keywords: ['learning', 'video', 'course', 'tutorial'] },
+  { id: 'journaling',          weight: 3,  keywords: ['journal'] },
+  { id: 'writing_dreams',      weight: 3,  keywords: ['dream'] },
   { id: 'calories_surplus',    weight: 5,  keywords: ['calorie'] },
-  { id: 'protein_amount',      weight: 4,  keywords: ['protein'] },
+  { id: 'protein_amount',      weight: 3,  keywords: ['protein'] },
   { id: 'leads_calls',         weight: 15, keywords: ['coldcall', 'coldcalling', 'call', 'lead'] },
   { id: 'professional_growth', weight: 8,  keywords: ['job', 'linkedin', 'scholarship'] },
   { id: 'development',         weight: 20, partial: 15, slots: [['fyp'], ['project']] }
@@ -185,24 +185,57 @@ export function computeWeeklyWorstDayExemptions(dailyStats, year, month, endDay)
 }
 
 export function computeStreakCount(dailyStats, isCurrentMonth, todayDay, year, month) {
-  const endDay = isCurrentMonth ? todayDay : dailyStats.length;
-  const exemptDays = computeWeeklyWorstDayExemptions(dailyStats, year, month, endDay);
+  const curYear = year || new Date().getFullYear();
+  const curMonth = month || new Date().getMonth() + 1;
 
-  let streak = 0;
-  for (let day = 1; day <= endDay; day++) {
-    const stat = dailyStats[day - 1];
-    if (!stat) continue;
+  if (isCurrentMonth) {
+    // Only completed past days (1 to todayDay - 1) determine the guaranteed streak.
+    // The current day has not ended yet (midnight has not arrived),
+    // so an incomplete today must NEVER reset or break the streak to 0.
+    const pastEndDay = Math.max(0, todayDay - 1);
+    const exemptDays = computeWeeklyWorstDayExemptions(dailyStats, curYear, curMonth, pastEndDay);
 
-    if (stat.score >= STREAK_THRESHOLD) {
-      streak++;
-    } else if (exemptDays.has(day)) {
-      // Exempt: Worst day of this week below 80% does not break streak!
-    } else if (day !== endDay || !isCurrentMonth) {
-      streak = 0;
-    } else {
-      streak = 0;
+    let streak = 0;
+    for (let day = 1; day <= pastEndDay; day++) {
+      const stat = dailyStats[day - 1];
+      if (!stat) continue;
+
+      if (stat.score >= STREAK_THRESHOLD) {
+        streak++;
+      } else if (exemptDays.has(day)) {
+        // Exempt: Lowest day of week below 80% does not break streak!
+      } else {
+        streak = 0;
+      }
     }
-  }
 
-  return streak;
+    // Today is in progress (updates officially after 12:00 midnight).
+    // If today's habits are already marked >= 80%, immediately award +1 credit!
+    const todayStat = dailyStats[todayDay - 1];
+    if (todayStat && todayStat.score >= STREAK_THRESHOLD) {
+      streak++;
+    }
+
+    return streak;
+  } else {
+    // Past month: all days have concluded past midnight.
+    const endDay = dailyStats.length;
+    const exemptDays = computeWeeklyWorstDayExemptions(dailyStats, curYear, curMonth, endDay);
+
+    let streak = 0;
+    for (let day = 1; day <= endDay; day++) {
+      const stat = dailyStats[day - 1];
+      if (!stat) continue;
+
+      if (stat.score >= STREAK_THRESHOLD) {
+        streak++;
+      } else if (exemptDays.has(day)) {
+        // Exempt
+      } else {
+        streak = 0;
+      }
+    }
+
+    return streak;
+  }
 }
