@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Check } from 'lucide-react';
+import { ArrowUpRight, Check, Users, PhoneCall, Flame, ListChecks } from 'lucide-react';
 import { fetchLeadStats, fetchMonthHabitData } from '@/lib/api';
 import LeadsTrendChart from '@/components/dashboard/LeadsTrendChart';
 import UpcomingAppointments from '@/components/dashboard/UpcomingAppointments';
@@ -52,8 +52,12 @@ export default function DashboardHome() {
   if (isLoading || !stats) {
     return (
       <div className="animate-pulse space-y-5" aria-busy="true" aria-label="Loading dashboard">
-        <div className="h-[116px] bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
-        <div className="h-[220px] bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-[168px] bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-[200px] bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />)}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 h-80 bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
           <div className="h-80 bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
@@ -72,81 +76,111 @@ export default function DashboardHome() {
   const todayDone = habitStats?.overallStats?.todayCompletedCount ?? 0;
   const totalHabitsCount = habitStats?.overallStats?.todayTotalHabits ?? (habitStats?.habits?.length ?? 0);
 
-  const headline = [
-    { label: 'Total leads', value: stats.leads?.total ?? 0, detail: `${stats.leads?.thisWeek ?? 0} this week, ${stats.leads?.thisMonth ?? 0} this month` },
-    { label: 'Cold calls', value: stats.calls?.total ?? 0, detail: `${stats.calls?.thisWeek ?? 0} this week, ${stats.calls?.thisMonth ?? 0} this month` },
-    { label: 'Habit streak', value: habitStreak, unit: habitStreak === 1 ? 'day' : 'days', detail: `Days at or above ${STREAK_THRESHOLD}%, Sundays exempt`, to: '/dashboard/habits' },
-    { label: "Today's habits", value: todayScore, unit: '%', detail: `${todayDone} of ${totalHabitsCount} done`, to: '/dashboard/habits', accent: true },
-  ];
+  const trends: { date: string; leads: number; calls: number }[] = stats.trends || [];
+
+  // Last 7 days of habit scores, ending today
+  const todayDay = new Date().getDate();
+  const recentHabitDays: any[] = (habitStats?.dailyStats || [])
+    .filter((d: any) => d.day <= todayDay)
+    .slice(-7);
 
   return (
     <div className="space-y-5">
-      {/* Headline numbers */}
-      <section className="surface grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-slate-200/70 dark:divide-slate-800 overflow-hidden">
-        {headline.map((item) => {
-          const body = (
-            <>
-              <p className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                {item.label}
-                {item.to && <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />}
-              </p>
-              <p className={cn(
-                'font-display text-[34px] leading-none mt-2 tabular-nums',
-                item.accent ? 'text-clay-700 dark:text-clay-300' : 'text-slate-900 dark:text-slate-50'
-              )}>
-                {item.value}
-                {item.unit && <span className="text-lg text-slate-400 dark:text-slate-500 ml-1">{item.unit}</span>}
-              </p>
-              <p className="text-[11.5px] text-slate-500 dark:text-slate-400 mt-2 truncate">{item.detail}</p>
-            </>
-          );
-          return item.to ? (
-            <button key={item.label} onClick={() => navigate(item.to!)} className="group text-left px-5 py-4 sm:px-6 sm:py-5 hover:bg-slate-900/[0.02] dark:hover:bg-white/[0.02] transition-colors">
-              {body}
-            </button>
-          ) : (
-            <div key={item.label} className="px-5 py-4 sm:px-6 sm:py-5">{body}</div>
-          );
-        })}
-      </section>
+      {/* Headline stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          icon={Users}
+          label="Total leads"
+          value={stats.leads?.total ?? 0}
+          color={theme.colors.clay}
+          onOpen={() => navigate('/dashboard/leads')}
+          footer={`${stats.leads?.thisWeek ?? 0} this week, ${stats.leads?.thisMonth ?? 0} this month`}
+          visual={(setHint) => (
+            <MiniBars
+              values={trends.map((t) => t.leads)}
+              labels={trends.map((t) => t.date)}
+              color={theme.colors.clay}
+              unit="lead"
+              onHover={setHint}
+            />
+          )}
+        />
+        <StatCard
+          icon={PhoneCall}
+          label="Cold calls"
+          value={stats.calls?.total ?? 0}
+          color={theme.colors.blue}
+          onOpen={() => navigate('/dashboard/leads')}
+          footer={`${stats.calls?.thisWeek ?? 0} this week, ${stats.calls?.thisMonth ?? 0} this month`}
+          visual={(setHint) => (
+            <MiniBars
+              values={trends.map((t) => t.calls)}
+              labels={trends.map((t) => t.date)}
+              color={theme.colors.blue}
+              unit="call"
+              onHover={setHint}
+            />
+          )}
+        />
+        <StatCard
+          icon={Flame}
+          label="Habit streak"
+          value={habitStreak}
+          unit={habitStreak === 1 ? 'day' : 'days'}
+          color={theme.colors.green}
+          onOpen={() => navigate('/dashboard/habits')}
+          footer={`Last 7 days, target ${STREAK_THRESHOLD}%`}
+          visual={(setHint) => <StreakDays days={recentHabitDays} todayDay={todayDay} color={theme.colors.green} onHover={setHint} />}
+        />
+        <StatCard
+          icon={ListChecks}
+          label="Today's habits"
+          value={todayScore}
+          unit="%"
+          color={theme.colors.clay}
+          accent
+          onOpen={() => navigate('/dashboard/habits')}
+          footer={`${todayDone} of ${totalHabitsCount} habits done`}
+          visual={(setHint) => (
+            <Segments done={todayDone} total={totalHabitsCount} color={theme.colors.clay} onHover={setHint} />
+          )}
+        />
+      </div>
 
       {/* Goals */}
-      <section className="surface p-5 sm:p-6" aria-labelledby="goals-heading">
-        <h2 id="goals-heading" className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Goals</h2>
-        <div className="mt-5 grid gap-6 lg:grid-cols-3 lg:gap-8">
-          <GoalBar
-            label="Leads added"
-            current={leadCurrent}
-            goal={leadGoal}
-            unit="leads"
-            color={theme.colors.clay}
-            period={leadGoalPeriod}
-            onPeriodChange={setLeadGoalPeriod}
-          />
-          <GoalBar
-            label="Cold calls"
-            current={callCurrent}
-            goal={callGoal}
-            unit="calls"
-            color={theme.colors.blue}
-            period={callGoalPeriod}
-            onPeriodChange={setCallGoalPeriod}
-          />
-          <GoalBar
-            label="Habit score today"
-            current={todayScore}
-            goal={STREAK_THRESHOLD}
-            unit="%"
-            suffix="%"
-            color={theme.colors.green}
-            caption="Hit the target to keep the streak"
-          />
-        </div>
-      </section>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <GoalCard
+          label="Leads goal"
+          current={leadCurrent}
+          goal={leadGoal}
+          unit="leads"
+          color={theme.colors.clay}
+          period={leadGoalPeriod}
+          onPeriodChange={setLeadGoalPeriod}
+        />
+        <GoalCard
+          label="Cold calls goal"
+          current={callCurrent}
+          goal={callGoal}
+          unit="calls"
+          color={theme.colors.blue}
+          period={callGoalPeriod}
+          onPeriodChange={setCallGoalPeriod}
+        />
+        <GoalCard
+          label="Habit score today"
+          current={todayScore}
+          goal={STREAK_THRESHOLD}
+          unit="%"
+          suffix="%"
+          color={theme.colors.green}
+          caption="Reach it to keep the streak"
+        />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
-          <LeadsTrendChart data={stats.trends || []} />
+          <LeadsTrendChart data={trends} />
         </div>
         <div className="lg:col-span-1">
           <UpcomingAppointments appointments={stats.upcomingAppointments || []} />
@@ -156,7 +190,235 @@ export default function DashboardHome() {
   );
 }
 
-function GoalBar({
+/* ------------------------------------------------------------------ */
+/* Stat cards                                                          */
+/* ------------------------------------------------------------------ */
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  unit,
+  color,
+  accent,
+  footer,
+  visual,
+  onOpen,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  unit?: string;
+  color: string;
+  accent?: boolean;
+  footer: string;
+  visual: (setHint: (hint: string | null) => void) => React.ReactNode;
+  onOpen: () => void;
+}) {
+  // Hovering the mini visual swaps the footer for that item's detail.
+  const [hint, setHint] = useState<string | null>(null);
+
+  return (
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen())}
+      className="group relative surface overflow-clip p-4 sm:p-5 flex flex-col cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-raised focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-clay-500/25"
+    >
+      {/* Soft wash in the card's color, brighter on hover */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full opacity-[0.10] group-hover:opacity-[0.18] transition-opacity duration-300 blur-2xl"
+        style={{ backgroundColor: color }}
+      />
+
+      <div className="relative flex items-center justify-between">
+        <span className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <span
+            className="grid place-items-center h-6 w-6 rounded-md"
+            style={{ backgroundColor: `${color}1f`, color }}
+          >
+            <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+          </span>
+          {label}
+        </span>
+        <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-slate-600 dark:group-hover:text-slate-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+      </div>
+
+      <p className={cn(
+        'relative font-display text-[36px] leading-none mt-3 tabular-nums',
+        accent ? 'text-clay-700 dark:text-clay-300' : 'text-slate-900 dark:text-slate-50'
+      )}>
+        <CountUp value={value} />
+        {unit && <span className="text-lg text-slate-400 dark:text-slate-500 ml-1">{unit}</span>}
+      </p>
+
+      <div className="relative mt-4 h-9" onClick={(e) => e.stopPropagation()}>
+        {visual(setHint)}
+      </div>
+
+      <p className="relative mt-2 text-[11.5px] text-slate-500 dark:text-slate-400 truncate h-4" aria-live="polite">
+        {hint ? <span className="text-slate-800 dark:text-slate-100 font-medium">{hint}</span> : footer}
+      </p>
+    </div>
+  );
+}
+
+/** Animates a number up from zero once, on mount or when it changes. */
+function CountUp({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || value === 0) {
+      setDisplay(value);
+      return;
+    }
+    const start = performance.now();
+    const duration = 700;
+    let frame = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(value * eased));
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return <>{display.toLocaleString()}</>;
+}
+
+function MiniBars({
+  values,
+  labels,
+  color,
+  unit,
+  onHover,
+}: {
+  values: number[];
+  labels: string[];
+  color: string;
+  unit: string;
+  onHover: (hint: string | null) => void;
+}) {
+  const [active, setActive] = useState<number | null>(null);
+  const max = Math.max(1, ...values);
+
+  if (values.length === 0) return <div className="h-full rounded-md bg-slate-100 dark:bg-slate-800" />;
+
+  return (
+    <div className="flex items-end gap-1 h-full" onMouseLeave={() => { setActive(null); onHover(null); }}>
+      {values.map((v, i) => {
+        const isLast = i === values.length - 1;
+        const isActive = active === i;
+        return (
+          <button
+            key={i}
+            type="button"
+            aria-label={`${labels[i]}: ${v} ${unit}${v === 1 ? '' : 's'}`}
+            onMouseEnter={() => { setActive(i); onHover(`${labels[i]}: ${v} ${unit}${v === 1 ? '' : 's'}`); }}
+            onFocus={() => { setActive(i); onHover(`${labels[i]}: ${v} ${unit}${v === 1 ? '' : 's'}`); }}
+            onBlur={() => { setActive(null); onHover(null); }}
+            className="flex-1 h-full flex items-end rounded-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clay-500/30"
+          >
+            <span
+              className="block w-full rounded-[3px] transition-all duration-300 origin-bottom"
+              style={{
+                height: `${Math.max(10, (v / max) * 100)}%`,
+                backgroundColor: color,
+                opacity: v === 0 ? 0.16 : isActive ? 1 : isLast ? 0.9 : active !== null ? 0.35 : 0.55,
+              }}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StreakDays({
+  days,
+  todayDay,
+  color,
+  onHover,
+}: {
+  days: any[];
+  todayDay: number;
+  color: string;
+  onHover: (hint: string | null) => void;
+}) {
+  if (days.length === 0) return <div className="h-full rounded-md bg-slate-100 dark:bg-slate-800" />;
+
+  return (
+    <div className="flex items-stretch gap-1 h-full" onMouseLeave={() => onHover(null)}>
+      {days.map((d) => {
+        const met = d.score >= STREAK_THRESHOLD;
+        const isToday = d.day === todayDay;
+        const exempt = !met && (d.isExempt || d.isSunday);
+        const status = met ? 'target hit' : exempt ? 'exempt' : isToday ? 'in progress' : 'missed';
+        const hint = `${d.weekday} ${d.day}: ${d.score}%, ${status}`;
+        return (
+          <button
+            key={d.day}
+            type="button"
+            aria-label={hint}
+            onMouseEnter={() => onHover(hint)}
+            onFocus={() => onHover(hint)}
+            onBlur={() => onHover(null)}
+            className={cn(
+              'flex-1 rounded-md flex flex-col items-center justify-center text-[9.5px] font-semibold leading-none transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clay-500/30',
+              met ? 'text-white' : exempt ? 'text-slate-400 border border-dashed border-slate-300 dark:border-slate-600' : 'text-slate-400 bg-slate-100 dark:bg-slate-800',
+              isToday && !met && 'ring-1 ring-inset ring-slate-300 dark:ring-slate-600'
+            )}
+            style={met ? { backgroundColor: color } : undefined}
+          >
+            {met ? <Check className="h-3 w-3" strokeWidth={3} /> : d.weekday.charAt(0)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Segments({
+  done,
+  total,
+  color,
+  onHover,
+}: {
+  done: number;
+  total: number;
+  color: string;
+  onHover: (hint: string | null) => void;
+}) {
+  const count = Math.max(total, 1);
+  return (
+    <div
+      className="flex items-end gap-[3px] h-full"
+      onMouseEnter={() => onHover(`${done} done, ${Math.max(0, total - done)} left today`)}
+      onMouseLeave={() => onHover(null)}
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <span
+          key={i}
+          className="flex-1 rounded-[2px] h-full transition-all duration-500"
+          style={{
+            backgroundColor: i < done ? color : undefined,
+            transitionDelay: `${i * 18}ms`,
+          }}
+        >
+          {i >= done && <span className="block h-full w-full rounded-[2px] bg-slate-100 dark:bg-slate-800" />}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Goal cards with progress rings                                      */
+/* ------------------------------------------------------------------ */
+
+function GoalCard({
   label,
   current,
   goal,
@@ -182,9 +444,9 @@ function GoalBar({
   const remaining = Math.max(0, goal - current);
 
   return (
-    <div>
+    <section className="surface p-5 sm:p-6 flex flex-col">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{label}</h3>
+        <h3 className="font-display text-lg font-medium text-slate-900 dark:text-slate-50">{label}</h3>
         {period && onPeriodChange ? (
           <div role="radiogroup" aria-label={`${label} period`} className="flex p-0.5 rounded-md bg-slate-100 dark:bg-slate-800">
             {(['week', 'month'] as Period[]).map((p) => (
@@ -205,33 +467,77 @@ function GoalBar({
             ))}
           </div>
         ) : (
-          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 h-6 flex items-center">Today</span>
+          <span className="text-[11px] font-medium px-2 h-6 grid place-items-center rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Today</span>
         )}
       </div>
 
-      <p className="mt-3 flex items-baseline gap-1.5 tabular-nums">
-        <span className="font-display text-[32px] leading-none text-slate-900 dark:text-slate-50">{current}{suffix}</span>
-        <span className="text-sm text-slate-400 dark:text-slate-500">/ {goal}{suffix}</span>
-      </p>
+      <div className="mt-4 flex items-center justify-between gap-4 flex-1">
+        <div className="min-w-0">
+          <p className="flex items-baseline gap-1.5 tabular-nums">
+            <span className="font-display text-[38px] leading-none text-slate-900 dark:text-slate-50">{current}{suffix}</span>
+            <span className="text-sm text-slate-400 dark:text-slate-500">/ {goal}{suffix}</span>
+          </p>
+          <p className="mt-2 text-[12px] text-slate-500 dark:text-slate-400">
+            {period ? (period === 'week' ? 'This week' : 'This month') : caption}
+          </p>
+          <span
+            className={cn(
+              'mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium',
+              done ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+            )}
+          >
+            {done ? <><Check className="h-3 w-3" strokeWidth={2.5} /> Goal reached</> : `${remaining}${suffix || ` ${unit}`} to go`}
+          </span>
+        </div>
 
-      <div
-        className="mt-3 h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"
-        role="progressbar"
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`${label}: ${pct}% of goal`}
-      >
-        <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: `${pct}%`, backgroundColor: color }} />
+        <ProgressRing pct={pct} color={color} done={done} label={`${label}: ${pct}% of goal`} />
       </div>
+    </section>
+  );
+}
 
-      <p className={cn('mt-2 text-[11.5px] flex items-center gap-1', done ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-500 dark:text-slate-400')}>
+function ProgressRing({ pct, color, done, label }: { pct: number; color: string; done: boolean; label: string }) {
+  const size = 112;
+  const stroke = 10;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  // Start empty, then fill so the ring animates in on load and on change.
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setShown(pct));
+    return () => cancelAnimationFrame(frame);
+  }, [pct]);
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={stroke} className="stroke-slate-100 dark:stroke-slate-800" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference - (shown / 100) * circumference}
+          style={{ transition: 'stroke-dashoffset 1s cubic-bezier(0.22, 1, 0.36, 1)' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
         {done ? (
-          <><Check className="h-3.5 w-3.5" strokeWidth={2.5} /> Goal reached</>
+          <span className="grid place-items-center h-9 w-9 rounded-full text-white" style={{ backgroundColor: color }}>
+            <Check className="h-5 w-5" strokeWidth={3} />
+          </span>
         ) : (
-          <>{pct}% there, {remaining}{suffix ? suffix : ` ${unit}`} to go{caption ? `. ${caption}` : ''}</>
+          <>
+            <span className="font-display text-2xl leading-none text-slate-900 dark:text-slate-50 tabular-nums">{pct}%</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">of goal</span>
+          </>
         )}
-      </p>
+      </div>
     </div>
   );
 }
