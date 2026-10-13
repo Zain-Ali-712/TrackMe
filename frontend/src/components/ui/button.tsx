@@ -5,23 +5,23 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-clay-500/30 disabled:pointer-events-none disabled:opacity-50 select-none",
   {
     variants: {
       variant: {
         default:
-          "bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98] shadow-sm shadow-slate-900/10 border border-slate-800/90 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200",
+          "bg-clay-600 text-white hover:bg-clay-700 active:scale-[0.98] shadow-[0_1px_2px_rgba(120,50,20,0.25),inset_0_1px_0_rgba(255,255,255,0.12)] dark:bg-clay-500 dark:hover:bg-clay-400 dark:text-slate-950",
         accent:
-          "bg-blue-600 text-white hover:bg-blue-500 active:scale-[0.98] shadow-sm shadow-blue-600/20 border border-blue-500",
+          "bg-slate-900 text-white hover:bg-slate-800 active:scale-[0.98] shadow-sm dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white",
         destructive:
           "bg-rose-600 text-white hover:bg-rose-500 active:scale-[0.98] shadow-sm shadow-rose-600/20 border border-rose-500",
         outline:
-          "border border-slate-200/80 bg-white text-slate-800 hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] shadow-sm shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/90",
+          "border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] shadow-[0_1px_2px_rgba(60,45,30,0.05)] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/90",
         secondary:
           "bg-slate-100 text-slate-800 hover:bg-slate-200/70 active:scale-[0.98] dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/80",
         ghost:
           "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/60",
-        link: "text-blue-600 underline-offset-4 hover:underline dark:text-blue-400",
+        link: "text-clay-600 underline-offset-4 hover:underline dark:text-clay-400",
       },
       size: {
         default: "h-9 px-4 py-2",

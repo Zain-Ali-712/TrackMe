@@ -309,8 +309,8 @@ export default function AppointmentsPage() {
       </div>
 
       {/* 2. STATUS TABS BAR (Upcoming, Scheduled, Completed, etc.) */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-1">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1 w-full">
+      <div className="rounded-xl bg-slate-200/50 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 p-1">
+        <div className="flex overflow-x-auto scrollbar-hide gap-0.5 w-full sm:grid sm:grid-cols-4 lg:grid-cols-7">
           {STATUS_TABS.map((tab) => {
             const count = statusCounts[tab.value] ?? 0;
             const isActive = statusFilter === tab.value;
@@ -319,19 +319,19 @@ export default function AppointmentsPage() {
                 key={tab.value}
                 onClick={() => setStatusFilter(tab.value)}
                 className={cn(
-                  'flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-150 border',
+                  'flex shrink-0 items-center justify-center gap-1.5 px-2.5 h-8 rounded-lg text-[12px] font-medium whitespace-nowrap transition-all duration-150',
                   isActive
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm'
-                    : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow-card'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-white/60 dark:hover:bg-slate-800/50'
                 )}
               >
                 <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', tab.dot, !isActive && 'opacity-60')} />
                 <span className="truncate">{tab.label}</span>
                 <span className={cn(
-                  'ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-bold tabular-nums',
+                  'rounded-md px-1.5 min-w-[1.25rem] text-[10px] font-semibold leading-[1.125rem] tabular-nums',
                   isActive
-                    ? 'bg-white/20 text-white dark:bg-slate-800 dark:text-slate-100'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    ? 'bg-clay-600 text-white dark:bg-clay-500 dark:text-slate-950'
+                    : 'bg-slate-900/[0.06] dark:bg-white/[0.07] text-slate-500 dark:text-slate-400'
                 )}>
                   {count}
                 </span>
@@ -342,14 +342,14 @@ export default function AppointmentsPage() {
       </div>
 
       {/* 3. TOOLBAR: Search + View Switcher */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card">
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <Input
             placeholder="Search prospect, contact, note..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/50 rounded-lg focus-visible:ring-slate-900 dark:focus-visible:ring-slate-100"
+            className="pl-8 h-8 text-xs bg-slate-50 dark:bg-slate-850"
           />
         </div>
 
@@ -359,13 +359,13 @@ export default function AppointmentsPage() {
           </span>
 
           {/* View Mode Toggle: Mini Cards vs Table */}
-          <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
             <button
               onClick={() => setViewMode('cards')}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all",
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
                 viewMode === 'cards'
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 shadow-card"
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               )}
               title="Mini Cards Showcase"
@@ -376,9 +376,9 @@ export default function AppointmentsPage() {
             <button
               onClick={() => setViewMode('table')}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all",
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
                 viewMode === 'table'
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 shadow-card"
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               )}
               title="Table View"
@@ -393,13 +393,13 @@ export default function AppointmentsPage() {
       {/* 4. MAIN SHOWCASE: MINI CARDS OR TABLE */}
       <div className="flex-1 overflow-y-auto min-h-0 pr-0.5">
         {isLoading ? (
-          <div className="p-12 text-center text-slate-400 font-medium">Loading appointments...</div>
+          <div className="p-12 text-center text-[13px] text-slate-500 dark:text-slate-400" aria-busy="true">Loading appointments</div>
         ) : filteredAppointments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 min-h-[300px]">
-            <div className="bg-slate-100 dark:bg-slate-800 h-16 w-16 rounded-full flex items-center justify-center mb-3 text-slate-400">
-              <Calendar className="h-7 w-7" />
+          <div className="surface flex flex-col items-center justify-center p-12 text-center min-h-[300px]">
+            <div className="bg-clay-50 dark:bg-clay-950/50 h-12 w-12 rounded-2xl flex items-center justify-center mb-4 text-clay-600 dark:text-clay-400">
+              <Calendar className="h-5 w-5" />
             </div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">No appointments found</h3>
+            <h3 className="font-display text-lg font-medium text-slate-900 dark:text-slate-50">No appointments here</h3>
             <p className="text-slate-500 dark:text-slate-400 text-xs max-w-sm mt-1">
               {search || statusFilter !== 'all' || activeNicheId !== 'all'
                 ? "Try clearing filters to see more appointments."
@@ -419,7 +419,7 @@ export default function AppointmentsPage() {
               return (
                 <div
                   key={apt._id}
-                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-[0_1px_3px_0_rgba(15,23,42,0.06)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.08)] transition-all duration-200 flex flex-col justify-between gap-3 group relative"
+                  className="surface p-4 hover:shadow-raised transition-shadow duration-200 flex flex-col justify-between gap-3 group relative"
                 >
                   {/* Card Header: Scheduled Date & Time Pill + Niche */}
                   <div className="flex items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
@@ -432,11 +432,11 @@ export default function AppointmentsPage() {
                       className="text-left group/time cursor-pointer hover:opacity-85 transition-opacity"
                       title="Click to reschedule date & time"
                     >
-                      <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900 dark:text-white">
-                        <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-900 dark:text-white">
+                        <Calendar className="h-3.5 w-3.5 text-clay-600 dark:text-clay-400 shrink-0" />
                         <span>{aptDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-xs font-bold text-blue-600 dark:text-blue-400">
+                      <div className="flex items-center gap-1.5 mt-0.5 text-xs font-bold text-clay-600 dark:text-clay-400">
                         <Clock className="h-3 w-3 shrink-0" />
                         <span>{aptDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                         <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
@@ -480,7 +480,7 @@ export default function AppointmentsPage() {
                       {apt.lead?.contact && (
                         <a
                           href={`tel:${apt.lead.contact}`}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium border border-slate-200/60 dark:border-slate-700/60"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:text-clay-600 dark:hover:text-clay-400 transition-colors font-medium border border-slate-200/60 dark:border-slate-700/60"
                         >
                           <Phone className="h-2.5 w-2.5" />
                           <span>{apt.lead.contact}</span>
@@ -489,7 +489,7 @@ export default function AppointmentsPage() {
                       {apt.lead?.email && (
                         <a
                           href={`mailto:${apt.lead.email}`}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium border border-slate-200/60 dark:border-slate-700/60 truncate max-w-[190px]"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:text-clay-600 dark:hover:text-clay-400 transition-colors font-medium border border-slate-200/60 dark:border-slate-700/60 truncate max-w-[190px]"
                           title={apt.lead.email}
                         >
                           <Mail className="h-2.5 w-2.5 shrink-0" />
@@ -534,12 +534,12 @@ export default function AppointmentsPage() {
                       setNotesApt(apt);
                       setIsNotesOpen(true);
                     }}
-                    className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 text-left transition-all group/notes cursor-pointer"
+                    className="p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 hover:border-clay-400 dark:hover:border-clay-500 text-left transition-all group/notes cursor-pointer"
                     title="Click to view full notes history or add notes"
                   >
                     <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       <span className="flex items-center gap-1 text-slate-600 dark:text-slate-300 font-semibold">
-                        <FileText className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                        <FileText className="h-3 w-3 text-clay-600 dark:text-clay-400" />
                         Meeting Notes
                       </span>
                       <span className="px-1.5 py-0.2 rounded-full bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[9px] font-bold tabular-nums">
@@ -574,7 +574,7 @@ export default function AppointmentsPage() {
                           setNotesApt(apt);
                           setIsNotesOpen(true);
                         }}
-                        className="h-7 px-2 text-[11px] text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 font-semibold rounded-lg"
+                        className="h-7 px-2 text-[11px] text-clay-600 dark:text-clay-400 hover:bg-clay-50 dark:hover:bg-clay-950/40 font-semibold rounded-lg"
                       >
                         <FileText className="h-3.5 w-3.5 mr-1" />
                         Notes
@@ -597,9 +597,9 @@ export default function AppointmentsPage() {
           </div>
         ) : (
           /* Table View Alternative */
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-[0_1px_3px_0_rgba(15,23,42,0.06)] overflow-hidden">
+          <div className="surface overflow-hidden">
             <table className="w-full text-sm text-left border-collapse">
-              <thead className="text-[11px] font-bold uppercase tracking-wider bg-slate-100/90 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10 backdrop-blur-sm">
+              <thead className="text-[11px] font-medium bg-slate-50/95 dark:bg-slate-850/95 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10 backdrop-blur-sm">
                 <tr>
                   <th className="px-4 py-3 min-w-[160px]">Date &amp; Time</th>
                   <th className="px-4 py-3 min-w-[200px]">Lead / Business</th>
@@ -629,7 +629,7 @@ export default function AppointmentsPage() {
                             <span>{aptDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
                             <CalendarClock className="h-3.5 w-3.5 text-slate-400 opacity-0 group-hover/time:opacity-100 transition-opacity shrink-0" />
                           </div>
-                          <div className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 font-bold flex items-center gap-1">
+                          <div className="text-xs text-clay-600 dark:text-clay-400 mt-0.5 font-bold flex items-center gap-1">
                             <Clock className="h-3 w-3 shrink-0" />
                             <span>{aptDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                           </div>

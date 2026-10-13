@@ -14,18 +14,18 @@ interface NicheTabBarProps {
 
 export default function NicheTabBar({ niches, activeNicheId, onSelect, onCreateNiche, onEditNiche, onDeleteNiche }: NicheTabBarProps) {
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
       <button
         onClick={() => onSelect('all')}
         className={cn(
-          "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 border",
+          "flex items-center gap-2 h-8 px-3.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 border",
           activeNicheId === 'all' || activeNicheId === null
-            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm shadow-slate-900/10"
+            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-card"
             : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 border-slate-200/80 dark:border-slate-800"
         )}
       >
         <Globe className="h-3.5 w-3.5" />
-        <span>All Leads</span>
+        <span>All leads</span>
       </button>
 
       {niches.map((niche) => {
@@ -35,9 +35,9 @@ export default function NicheTabBar({ niches, activeNicheId, onSelect, onCreateN
             <button
               onClick={() => onSelect(niche._id)}
               className={cn(
-                "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 border",
+                "flex items-center gap-2 h-8 px-3.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 border",
                 activeNicheId === niche._id
-                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm shadow-slate-900/10 pr-7"
+                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-card pr-7"
                   : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 border-slate-200/80 dark:border-slate-800 pr-7"
               )}
             >
@@ -73,10 +73,10 @@ export default function NicheTabBar({ niches, activeNicheId, onSelect, onCreateN
 
       <button
         onClick={onCreateNiche}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-dashed border-slate-300 dark:border-slate-700 whitespace-nowrap shrink-0 transition-colors"
+        className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-dashed border-slate-300 dark:border-slate-700 whitespace-nowrap shrink-0 transition-colors"
       >
         <Plus className="h-3.5 w-3.5" />
-        New Niche
+        New niche
       </button>
     </div>
   );

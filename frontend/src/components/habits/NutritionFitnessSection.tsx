@@ -1,17 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Bar, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  ReferenceLine,
-  ComposedChart
-} from 'recharts';
-import { UtensilsCrossed, Dumbbell, Activity, CheckCircle2, Moon, ShieldCheck, Flame, Calendar } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Dumbbell, Moon, ShieldCheck, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useChartTheme, ChartTooltipCard } from '@/lib/chartTheme';
+
+const CALORIE_TARGET = 2400;
+const PROTEIN_TARGET = 80;
 
 export interface DayNutritionData {
   date: string;
@@ -37,18 +31,8 @@ export default function NutritionFitnessSection({
   monthName = 'This Month',
   year = new Date().getFullYear()
 }: NutritionFitnessSectionProps) {
-  const [isDark, setIsDark] = useState(() => 
-    typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : false
-  );
+  const theme = useChartTheme();
   const [chartView, setChartView] = useState<'7days' | 'month'>('7days');
-
-  useEffect(() => {
-    const checkDark = () => setIsDark(document.documentElement.classList.contains('dark'));
-    checkDark();
-    const observer = new MutationObserver(checkDark);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
 
   // Use monthData if provided for the monthly workout/rest section; fallback to data
   const workoutSourceData = monthData.length > 0 ? monthData : data;
@@ -77,316 +61,149 @@ export default function NutritionFitnessSection({
   const calorieGoalDays = activeChartData.filter(d => (d.calories || 0) > 2400).length;
   const proteinGoalDays = activeChartData.filter(d => (d.protein || 0) >= 80).length;
 
-  const CustomNutritionTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const item: DayNutritionData = payload[0].payload;
-      const cal = item.calories || 0;
-      const prot = item.protein || 0;
-      const calMet = cal > 2400;
-      const protMet = prot >= 80;
-
-      return (
-        <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border border-slate-700/80 text-white p-3 rounded-xl shadow-xl min-w-[180px]">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-2">
-            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-              {item.weekday}, Day {item.day}
-            </span>
-            <span className="text-[10px] text-slate-400 tabular-nums">{item.date}</span>
-          </div>
-
-          <div className="space-y-2 text-xs">
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-orange-400 font-semibold flex items-center gap-1 text-[11px]">
-                  <UtensilsCrossed className="h-3 w-3" /> Calories:
-                </span>
-                <span className="font-extrabold tabular-nums">
-                  {cal > 0 ? `${cal.toLocaleString()} kcal` : 'Not recorded'}
-                </span>
-              </div>
-              <div className="text-[10px] pl-4 pt-0.5">
-                {calMet ? (
-                  <span className="text-emerald-400 font-bold flex items-center gap-0.5">
-                    <CheckCircle2 className="h-2.5 w-2.5" /> Surplus Met (&gt;2400)
-                  </span>
-                ) : cal > 0 ? (
-                  <span className="text-amber-400 font-medium">
-                    {2401 - cal} kcal under 2400 target
-                  </span>
-                ) : (
-                  <span className="text-slate-500">Pending target &gt;2400</span>
-                )}
-              </div>
-            </div>
-
-            <div className="pt-1 border-t border-slate-800/80">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-emerald-400 font-semibold flex items-center gap-1 text-[11px]">
-                  <Activity className="h-3 w-3" /> Protein:
-                </span>
-                <span className="font-extrabold tabular-nums">
-                  {prot > 0 ? `${prot}g` : 'Not recorded'}
-                </span>
-              </div>
-              <div className="text-[10px] pl-4 pt-0.5">
-                {protMet ? (
-                  <span className="text-emerald-400 font-bold flex items-center gap-0.5">
-                    <CheckCircle2 className="h-2.5 w-2.5" /> Target Met (&ge;80g)
-                  </span>
-                ) : prot > 0 ? (
-                  <span className="text-amber-400 font-medium">
-                    {80 - prot}g under 80g target
-                  </span>
-                ) : (
-                  <span className="text-slate-500">Pending target &ge;80g</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
+  const NutritionTooltip = ({ active, payload }: any) => {
+    if (!active || !payload?.length) return null;
+    const item: DayNutritionData = payload[0].payload;
+    const cal = item.calories || 0;
+    const prot = item.protein || 0;
+    return (
+      <ChartTooltipCard
+        title={`${item.weekday}, day ${item.day}`}
+        rows={[
+          { label: 'Calories', value: cal > 0 ? `${cal.toLocaleString()} kcal` : 'Not logged', color: theme.colors.clay },
+          { label: 'Protein', value: prot > 0 ? `${prot} g` : 'Not logged', color: theme.colors.green },
+        ]}
+        footer={
+          <span className="flex flex-col gap-0.5">
+            <span>{cal > CALORIE_TARGET ? 'Calorie target met' : cal > 0 ? `${CALORIE_TARGET + 1 - cal} kcal under target` : `Calorie target above ${CALORIE_TARGET}`}</span>
+            <span>{prot >= PROTEIN_TARGET ? 'Protein target met' : prot > 0 ? `${PROTEIN_TARGET - prot} g under target` : `Protein target ${PROTEIN_TARGET} g`}</span>
+          </span>
+        }
+      />
+    );
   };
+
+  const xKey = chartView === 'month' ? 'day' : 'weekday';
+  const barSize = chartView === 'month' ? 12 : 26;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-      {/* Left: Elevated Modern Calories & Protein Rhythm Chart */}
-      <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-[0_1px_3px_0_rgba(15,23,42,0.08),0_1px_2px_-1px_rgba(15,23,42,0.06)] hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)] transition-all duration-200 flex flex-col justify-between">
-        <div>
-          {/* Header row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-xl bg-orange-50 dark:bg-orange-950/50 border border-orange-200/60 dark:border-orange-900/60 flex items-center justify-center text-orange-600 dark:text-orange-400 shadow-2xs">
-                <UtensilsCrossed className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  <span>Nutrition Rhythm</span>
-                  <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-orange-100 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300 border border-orange-200/60 dark:border-orange-800/60">
-                    {chartView === '7days' ? 'Last 7 Days' : `${monthName} Full`}
-                  </span>
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Target: Calories &gt;2400 kcal &bull; Protein &ge;80g
-                </p>
-              </div>
-            </div>
-
-            {/* View Switcher & Quick Summary Chips */}
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {monthData.length > 0 && (
-                <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/80">
-                  <button
-                    type="button"
-                    onClick={() => setChartView('7days')}
-                    className={cn(
-                      "px-2 py-1 text-[10px] font-bold rounded-md transition-all",
-                      chartView === '7days'
-                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
-                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                    )}
-                  >
-                    7 Days
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartView('month')}
-                    className={cn(
-                      "px-2 py-1 text-[10px] font-bold rounded-md transition-all",
-                      chartView === 'month'
-                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
-                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                    )}
-                  >
-                    Month
-                  </button>
-                </div>
-              )}
-
-              <div className="px-2.5 py-1 rounded-lg bg-orange-50/70 dark:bg-orange-950/40 border border-orange-200/60 dark:border-orange-800/60 text-orange-700 dark:text-orange-300 text-[11px] font-bold tabular-nums">
-                Avg: {avgCalories} kcal
-              </div>
-              <div className="px-2.5 py-1 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold tabular-nums">
-                Avg: {avgProtein}g
-              </div>
-            </div>
+      {/* Left: calories and protein, one scale each */}
+      <section className="lg:col-span-7 surface p-5 sm:p-6 flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div>
+            <h3 className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Nutrition</h3>
+            <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">
+              {chartView === '7days' ? 'Last 7 days' : monthName}. Targets: over {CALORIE_TARGET.toLocaleString()} kcal and {PROTEIN_TARGET} g protein
+            </p>
           </div>
-
-          {/* Goal badges row */}
-          <div className="flex flex-wrap items-center gap-4 mb-2 text-[11px]">
-            <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
-              <span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block shadow-xs" />
-              Calories ({calorieGoalDays}/{activeChartData.length} met)
-            </span>
-            <span className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-xs" />
-              Protein ({proteinGoalDays}/{activeChartData.length} met)
-            </span>
-          </div>
+          {monthData.length > 0 && (
+            <div role="radiogroup" aria-label="Nutrition range" className="flex p-0.5 rounded-md bg-slate-100 dark:bg-slate-800 self-start">
+              {([['7days', '7 days'], ['month', 'Month']] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={chartView === value}
+                  onClick={() => setChartView(value)}
+                  className={cn(
+                    'px-2.5 h-6 rounded text-[11px] font-medium transition-colors',
+                    chartView === value
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 shadow-card'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* The Sleek Dual Chart */}
-        <div className="h-60 w-full mt-2">
+        <MetricPanel
+          label="Calories"
+          color={theme.colors.clay}
+          summary={`avg ${avgCalories.toLocaleString()} kcal, target met ${calorieGoalDays}/${activeChartData.length} days`}
+        >
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart
-              data={activeChartData}
-              margin={{ top: 15, right: 10, left: -10, bottom: 5 }}
-            >
-              <defs>
-                <linearGradient id="calBarGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f97316" stopOpacity={0.95} />
-                  <stop offset="100%" stopColor="#ea580c" stopOpacity={0.7} />
-                </linearGradient>
-              </defs>
-
-              <CartesianGrid 
-                strokeDasharray="3 3" 
-                stroke={isDark ? "#334155" : "#e2e8f0"} 
-                vertical={false} 
-                opacity={0.5}
-              />
-
-              <XAxis 
-                dataKey={chartView === 'month' ? 'day' : 'weekday'} 
-                tickLine={false} 
-                axisLine={false}
-                tick={{ fontSize: 10, fill: isDark ? '#94a3b8' : '#64748b', fontWeight: 700 }}
-              />
-
-              {/* Left Y-Axis for Calories */}
-              <YAxis 
-                yAxisId="left"
-                domain={[0, (dataMax: number) => Math.max(3000, Math.ceil(dataMax / 500) * 500)]}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 10, fill: '#ea580c', fontWeight: 700 }}
-                tickFormatter={(val) => `${val}`}
-              />
-
-              {/* Right Y-Axis for Protein */}
-              <YAxis 
-                yAxisId="right"
-                orientation="right"
-                domain={[0, (dataMax: number) => Math.max(120, Math.ceil(dataMax / 20) * 20)]}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 10, fill: '#10b981', fontWeight: 700 }}
-                tickFormatter={(val) => `${val}g`}
-              />
-
-              {/* Target threshold lines */}
-              <ReferenceLine 
-                yAxisId="left" 
-                y={2400} 
-                stroke="#f97316" 
-                strokeDasharray="4 4" 
-                strokeWidth={1.5}
-                label={{ 
-                  value: '2400 kcal target', 
-                  position: 'insideTopLeft', 
-                  fill: '#f97316', 
-                  fontSize: 9, 
-                  fontWeight: 800 
-                }} 
-              />
-              <ReferenceLine 
-                yAxisId="right" 
-                y={80} 
-                stroke="#10b981" 
-                strokeDasharray="4 4" 
-                strokeWidth={1.5}
-                label={{ 
-                  value: '80g target', 
-                  position: 'insideTopRight', 
-                  fill: '#10b981', 
-                  fontSize: 9, 
-                  fontWeight: 800 
-                }} 
-              />
-
-              <Tooltip content={<CustomNutritionTooltip />} />
-
-              {/* Calories Bar with Rounded Corners and Gradient */}
-              <Bar 
-                yAxisId="left"
-                dataKey="calories" 
-                fill="url(#calBarGradient)" 
-                radius={[5, 5, 0, 0]} 
-                maxBarSize={chartView === 'month' ? 14 : 26}
-              />
-
-              {/* Protein Line with High-Contrast Dot Stylings */}
-              <Line 
-                yAxisId="right"
-                type="monotone" 
-                dataKey="protein" 
-                stroke="#10b981" 
-                strokeWidth={2.75}
-                dot={{ r: 3.5, fill: '#10b981', strokeWidth: 2, stroke: '#ffffff' }}
-                activeDot={{ r: 5.5, fill: '#10b981', stroke: '#ffffff', strokeWidth: 2 }}
-              />
-            </ComposedChart>
+            <BarChart data={activeChartData} margin={{ top: 6, right: 8, left: -2, bottom: 0 }} syncId="nutrition">
+              <CartesianGrid {...theme.grid} />
+              <XAxis dataKey={xKey} {...theme.axis} hide />
+              <YAxis {...theme.axis} width={52} domain={[0, (max: number) => Math.max(3000, Math.ceil(max / 500) * 500)]} tickCount={4} />
+              <Tooltip content={<NutritionTooltip />} cursor={theme.barCursor} />
+              <ReferenceLine y={CALORIE_TARGET} stroke={theme.ink.axis} strokeDasharray="4 4" strokeWidth={1.25} />
+              <Bar dataKey="calories" name="Calories" fill={theme.colors.clay} radius={[4, 4, 0, 0]} maxBarSize={barSize} />
+            </BarChart>
           </ResponsiveContainer>
-        </div>
-      </div>
+        </MetricPanel>
+
+        <MetricPanel
+          label="Protein"
+          color={theme.colors.green}
+          summary={`avg ${avgProtein} g, target met ${proteinGoalDays}/${activeChartData.length} days`}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={activeChartData} margin={{ top: 6, right: 8, left: -2, bottom: 0 }} syncId="nutrition">
+              <CartesianGrid {...theme.grid} />
+              <XAxis dataKey={xKey} {...theme.axis} />
+              <YAxis {...theme.axis} width={52} domain={[0, (max: number) => Math.max(120, Math.ceil(max / 20) * 20)]} tickCount={4} unit="g" />
+              <Tooltip content={<NutritionTooltip />} cursor={theme.barCursor} />
+              <ReferenceLine y={PROTEIN_TARGET} stroke={theme.ink.axis} strokeDasharray="4 4" strokeWidth={1.25} />
+              <Bar dataKey="protein" name="Protein" fill={theme.colors.green} radius={[4, 4, 0, 0]} maxBarSize={barSize} />
+            </BarChart>
+          </ResponsiveContainer>
+        </MetricPanel>
+      </section>
 
       {/* Right: Monthly Workout & Rest Days (Strictly for Current Selected Month) */}
-      <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-[0_1px_3px_0_rgba(15,23,42,0.08),0_1px_2px_-1px_rgba(15,23,42,0.06)] hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)] transition-all duration-200 flex flex-col justify-between">
+      <section className="lg:col-span-5 surface p-5 sm:p-6 flex flex-col justify-between">
         <div>
           {/* Header: Displays exact selected month */}
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/60 dark:border-emerald-900/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-2xs">
-                <Dumbbell className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
-                  Workout &amp; Rest Days
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  <span>{monthName} {year} &bull; Monthly Record</span>
-                </p>
-              </div>
+            <div>
+              <h3 className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Training</h3>
+              <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" />
+                {monthName} {year}
+              </p>
             </div>
             
             <div className="text-right">
-              <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+              <span className="font-display text-[26px] leading-none text-slate-900 dark:text-slate-50 tabular-nums">
                 {activeStreakAdherence}%
               </span>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                Adherence
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                Days logged
               </p>
             </div>
           </div>
 
           {/* Quick Stats Badges for Current Month */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/60 rounded-xl p-2 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">
+          <div className="grid grid-cols-3 divide-x divide-slate-200/70 dark:divide-slate-800 rounded-xl border border-slate-200/70 dark:border-slate-800 mb-4 mt-2">
+            <div className="p-2.5 text-center">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                 Workouts
               </span>
-              <span className="text-base font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
-                {workoutDaysCount} <span className="text-xs font-semibold text-emerald-600/70">days</span>
+              <span className="font-display text-xl text-emerald-700 dark:text-emerald-400 tabular-nums">
+                {workoutDaysCount} 
               </span>
             </div>
 
-            <div className="bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
-                Rest Days
+            <div className="p-2.5 text-center">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                Rest days
               </span>
-              <span className="text-base font-black text-slate-700 dark:text-slate-200 tabular-nums">
-                {restDaysCount} <span className="text-xs font-semibold text-slate-500">days</span>
+              <span className="font-display text-xl text-slate-800 dark:text-slate-100 tabular-nums">
+                {restDaysCount} 
               </span>
             </div>
 
-            <div className="bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50 dark:border-rose-900/50 rounded-xl p-2 text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
+            <div className="p-2.5 text-center">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                 Skipped
               </span>
-              <span className="text-base font-black text-rose-600 dark:text-rose-400 tabular-nums">
-                {skippedDaysCount} <span className="text-xs font-semibold text-rose-500">days</span>
+              <span className="font-display text-xl text-rose-600 dark:text-rose-400 tabular-nums">
+                {skippedDaysCount} 
               </span>
             </div>
           </div>
@@ -419,7 +236,7 @@ export default function NutritionFitnessSection({
 
                   <div className="flex items-center gap-2">
                     {isWorkout && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
                         <Dumbbell className="h-3 w-3" /> Workout
                       </span>
                     )}
@@ -450,11 +267,26 @@ export default function NutritionFitnessSection({
         </div>
 
         {/* Motivational Note */}
-        <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-          <ShieldCheck className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+        <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+          <ShieldCheck className="h-3.5 w-3.5 text-clay-600 dark:text-clay-400 shrink-0" />
           <span>Rest days earn task credit. Skipped days remain unmarked for honest tracking.</span>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function MetricPanel({ label, color, summary, children }: { label: string; color: string; summary: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-5">
+      <div className="flex items-baseline justify-between gap-3 mb-1.5">
+        <span className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-200">
+          <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: color }} />
+          {label}
+        </span>
+        <span className="text-[11.5px] text-slate-500 dark:text-slate-400 tabular-nums">{summary}</span>
       </div>
+      <div className="h-[118px] w-full">{children}</div>
     </div>
   );
 }

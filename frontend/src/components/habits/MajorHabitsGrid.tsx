@@ -41,7 +41,7 @@ export default function MajorHabitsGrid({ stats }: MajorHabitsGridProps) {
         return (
           <div
             key={item.key}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 shadow-card hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between"
           >
             {/* Top row: Icon + Title & Subtitle */}
             <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -80,7 +80,7 @@ export default function MajorHabitsGrid({ stats }: MajorHabitsGridProps) {
               </div>
 
               {/* Bold percentage text */}
-              <span className="text-xs font-black text-slate-900 dark:text-white tabular-nums shrink-0 ml-1">
+              <span className="text-xs font-bold text-slate-900 dark:text-white tabular-nums shrink-0 ml-1">
                 {percent}%
               </span>
             </div>

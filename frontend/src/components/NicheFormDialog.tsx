@@ -130,7 +130,7 @@ export default function NicheFormDialog({ open, onClose, onSubmit, niche }: Nich
 
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={onClose} className="rounded-lg">Cancel</Button>
-            <Button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 shadow-sm shadow-slate-900/10 font-semibold rounded-lg">
+            <Button type="submit" className="rounded-lg">
               {niche ? 'Save Changes' : 'Create Niche'}
             </Button>
           </DialogFooter>

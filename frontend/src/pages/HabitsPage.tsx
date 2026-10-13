@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Flame, 
-  CalendarDays,
-  Target
-} from 'lucide-react';
+import { Plus, Flame, CalendarDays, Target, Info, CircleDashed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { 
@@ -275,13 +270,13 @@ export default function HabitsPage() {
         if (updateData.calories > 2400) {
           toast.success(`Calories surplus logged: ${updateData.calories} kcal (>2400 Target Met!)`);
         } else if (updateData.calories > 0) {
-          toast(`Calories logged: ${updateData.calories} kcal (${2401 - updateData.calories} kcal to target)`, { icon: 'ℹ️' });
+          toast(`Calories logged: ${updateData.calories} kcal (${2401 - updateData.calories} kcal to target)`, { icon: <Info className="h-4 w-4 text-clay-600" /> });
         }
       } else if (updateData.protein !== undefined) {
         if (updateData.protein >= 80) {
           toast.success(`Protein logged: ${updateData.protein}g (≥80g Target Met!)`);
         } else if (updateData.protein > 0) {
-          toast(`Protein logged: ${updateData.protein}g (${80 - updateData.protein}g to target)`, { icon: 'ℹ️' });
+          toast(`Protein logged: ${updateData.protein}g (${80 - updateData.protein}g to target)`, { icon: <Info className="h-4 w-4 text-clay-600" /> });
         }
       } else if (updateData.workoutStatus) {
         if (updateData.workoutStatus === 'workout') {
@@ -289,7 +284,7 @@ export default function HabitsPage() {
         } else if (updateData.workoutStatus === 'rest') {
           toast.success('Rest day logged (+1 routine completed)');
         } else {
-          toast('Workout / rest status cleared', { icon: '⚪' });
+          toast('Workout / rest status cleared', { icon: <CircleDashed className="h-4 w-4 text-slate-400" /> });
         }
       }
     } catch (error: any) {
@@ -336,7 +331,7 @@ export default function HabitsPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Month & Year Selection Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-[0_1px_3px_0_rgba(15,23,42,0.08),0_1px_2px_-1px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 surface p-3.5">
         {/* Month Pills Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 lg:pb-0">
           {MONTH_SHORT.map((m, idx) => {
@@ -359,7 +354,7 @@ export default function HabitsPage() {
                 {isCurrentMonth && (
                   <span className={cn(
                     "ml-1.5 w-1.5 h-1.5 rounded-full inline-block",
-                    isSelected ? "bg-emerald-400" : "bg-blue-600"
+                    isSelected ? "bg-emerald-400" : "bg-clay-600"
                   )} />
                 )}
               </button>
@@ -386,13 +381,13 @@ export default function HabitsPage() {
             onClick={jumpToToday}
             className="h-8.5 px-3 text-xs gap-1.5 border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
           >
-            <CalendarDays className="h-3.5 w-3.5 text-blue-600" />
+            <CalendarDays className="h-3.5 w-3.5 text-clay-600" />
             <span>Today</span>
           </Button>
 
           <Button
             onClick={() => { setEditingHabit(null); setIsFormOpen(true); }}
-            className="h-8.5 px-3.5 text-xs font-semibold gap-1.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 rounded-lg shadow-sm"
+            className="h-8 px-3.5 text-xs gap-1.5"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>New Habit</span>
@@ -416,9 +411,9 @@ export default function HabitsPage() {
             {/* Left Column: 2 Compact Cards (Single Column) */}
             <div className="lg:col-span-3 flex flex-col justify-between gap-3.5">
               {/* Card 1: Streak Count */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-[0_1px_3px_0_rgba(15,23,42,0.08),0_1px_2px_-1px_rgba(15,23,42,0.06)] flex flex-col justify-between flex-1">
+              <div className="surface p-5 flex flex-col justify-between flex-1">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                     Streak Count
                   </span>
                   <div className="h-7 w-7 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200/60 dark:border-amber-800/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
@@ -427,10 +422,10 @@ export default function HabitsPage() {
                 </div>
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
+                    <h3 className="font-display text-[34px] leading-none text-slate-900 dark:text-slate-50 tabular-nums">
                       {data.streakCount ?? 0}
                     </h3>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
                       Days Streak
                     </span>
                   </div>
@@ -452,9 +447,9 @@ export default function HabitsPage() {
               </div>
 
               {/* Card 2: Today's Score */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-[0_1px_3px_0_rgba(15,23,42,0.08),0_1px_2px_-1px_rgba(15,23,42,0.06)] flex flex-col justify-between flex-1">
+              <div className="surface p-5 flex flex-col justify-between flex-1">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                     Today's Score
                   </span>
                   <div className="h-7 w-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -463,7 +458,7 @@ export default function HabitsPage() {
                 </div>
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
+                    <h3 className="font-display text-[34px] leading-none text-slate-900 dark:text-slate-50 tabular-nums">
                       {data.todayScore ?? 0}%
                     </h3>
                     <span className="text-xs font-semibold text-slate-400">
@@ -474,7 +469,7 @@ export default function HabitsPage() {
                     <div 
                       className={cn(
                         "h-full rounded-full transition-all duration-500",
-                        (data.todayScore || 0) >= STREAK_THRESHOLD ? "bg-emerald-500" : "bg-blue-600"
+                        (data.todayScore || 0) >= STREAK_THRESHOLD ? "bg-emerald-500" : "bg-clay-600"
                       )}
                       style={{ width: `${Math.min(100, data.todayScore || 0)}%` }}
                     />

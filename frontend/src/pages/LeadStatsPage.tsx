@@ -1,28 +1,36 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PhoneOff, ThumbsDown, PhoneCall, Clock, CalendarCheck, CheckCircle,
-  TrendingUp, Users, AlertCircle, Ban, Calendar,
-  Globe, CheckCircle2
+  Users, AlertCircle, Ban, Globe, ArrowUpRight, RotateCw,
 } from 'lucide-react';
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  PieChart, Pie, Cell
-} from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { fetchNiches, fetchNicheStats } from '@/lib/api';
-import { cn, getNicheIcon } from '@/lib/utils';
+import { cn, getNicheIcon, STATUS_COLORS } from '@/lib/utils';
+import { useChartTheme, SeriesTooltip, ChartLegend } from '@/lib/chartTheme';
+import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
 
 const STATUS_CONFIG = [
-  { key: 'New Lead',       label: 'New Leads',      icon: Users,         color: 'text-slate-700 dark:text-slate-300', dot: 'bg-slate-500',   bg: 'bg-slate-50 dark:bg-slate-800/40',   border: 'border-slate-200 dark:border-slate-700',   chartColor: '#64748b', nav: 'New Lead' },
-  { key: 'No Answer',      label: 'No Answer',      icon: PhoneOff,      color: 'text-slate-500',                     dot: 'bg-slate-400',   bg: 'bg-slate-50 dark:bg-slate-800/40',   border: 'border-slate-200 dark:border-slate-700',   chartColor: '#94a3b8', nav: 'No Answer' },
-  { key: 'Not Interested', label: 'Not Interested', icon: ThumbsDown,    color: 'text-rose-600',                      dot: 'bg-rose-500',    bg: 'bg-rose-50 dark:bg-rose-950/30',     border: 'border-rose-200 dark:border-rose-900/40',  chartColor: '#f43f5e', nav: 'Not Interested' },
-  { key: 'Callback',       label: 'Callback',       icon: PhoneCall,     color: 'text-amber-600',                     dot: 'bg-amber-500',   bg: 'bg-amber-50 dark:bg-amber-950/30',   border: 'border-amber-200 dark:border-amber-900/40', chartColor: '#f59e0b', nav: 'Callback' },
-  { key: 'Follow Up',      label: 'Follow Up',      icon: Clock,         color: 'text-sky-600',                       dot: 'bg-sky-500',     bg: 'bg-sky-50 dark:bg-sky-950/30',       border: 'border-sky-200 dark:border-sky-900/40',    chartColor: '#0284c7', nav: 'Follow Up' },
-  { key: 'Appointment',    label: 'Appointment',    icon: CalendarCheck, color: 'text-blue-700 dark:text-blue-400',  dot: 'bg-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30',     border: 'border-blue-200 dark:border-blue-900/40',  chartColor: '#2563eb', nav: 'Appointment' },
-  { key: 'Closed',         label: 'Closed',         icon: CheckCircle,   color: 'text-emerald-600',                   dot: 'bg-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-900/40', chartColor: '#10b981', nav: 'Closed' },
-  { key: 'DNC',            label: 'DNC',            icon: Ban,           color: 'text-red-600',                       dot: 'bg-red-500',     bg: 'bg-red-50 dark:bg-red-950/30',       border: 'border-red-200 dark:border-red-900/40',    chartColor: '#ef4444', nav: 'DNC' },
+  { key: 'New Lead',       label: 'New leads',      icon: Users },
+  { key: 'No Answer',      label: 'No answer',      icon: PhoneOff },
+  { key: 'Not Interested', label: 'Not interested', icon: ThumbsDown },
+  { key: 'Callback',       label: 'Callback',       icon: PhoneCall },
+  { key: 'Follow Up',      label: 'Follow up',      icon: Clock },
+  { key: 'Appointment',    label: 'Appointment',    icon: CalendarCheck },
+  { key: 'Closed',         label: 'Closed',         icon: CheckCircle },
+  { key: 'DNC',            label: 'DNC',            icon: Ban },
 ];
+
+type SeriesKey = 'leads' | 'appointments' | 'closed';
+
+const chipClass = (selected: boolean) =>
+  cn(
+    'h-8 px-3 rounded-lg text-xs font-medium border transition-colors inline-flex items-center gap-1.5 whitespace-nowrap',
+    selected
+      ? 'bg-clay-600 text-white border-clay-600 dark:bg-clay-500 dark:border-clay-500 dark:text-slate-950 shadow-[0_1px_2px_rgba(120,50,20,0.25)]'
+      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 hover:text-slate-900 dark:hover:border-slate-600 dark:hover:text-slate-50'
+  );
 
 export default function LeadStatsPage() {
   const navigate = useNavigate();
@@ -32,24 +40,14 @@ export default function LeadStatsPage() {
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [visible, setVisible] = useState<Record<SeriesKey, boolean>>({ leads: true, appointments: true, closed: true });
+  const theme = useChartTheme();
 
-  // Active metric toggle for the full-width performance velocity chart (All / Leads / Appointments / Closed)
-  const [activeVelocityMetric, setActiveVelocityMetric] = useState<'all' | 'leads' | 'appointments' | 'closed'>('all');
-  const [isDark, setIsDark] = useState(() =>
-    typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : false
-  );
-
-  useEffect(() => {
-    const checkDark = () => setIsDark(document.documentElement.classList.contains('dark'));
-    checkDark();
-    const observer = new MutationObserver(checkDark);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  const leadColor = isDark ? '#f1f5f9' : '#1e293b';
-  const closedColor = isDark ? '#34d399' : '#10b981';
-  const apptColor = isDark ? '#38bdf8' : '#0284c7';
+  const seriesColor: Record<SeriesKey, string> = {
+    leads: theme.colors.clay,
+    appointments: theme.colors.blue,
+    closed: theme.colors.green,
+  };
 
   useEffect(() => {
     fetchNiches()
@@ -78,125 +76,68 @@ export default function LeadStatsPage() {
     }
   };
 
-  const handleStatusCardClick = (navStatus: string) => {
+  const openPipeline = (status: string) => {
     navigate('/dashboard/leads', {
-      state: { nicheId: selectedNicheId === 'all' ? null : selectedNicheId, status: navStatus }
+      state: { nicheId: selectedNicheId === 'all' ? null : selectedNicheId, status }
     });
   };
 
+  const toggleSeries = (key: SeriesKey) =>
+    setVisible((v) => {
+      const next = { ...v, [key]: !v[key] };
+      return Object.values(next).some(Boolean) ? next : v;
+    });
+
   const selectedNiche = niches.find(n => n._id === selectedNicheId);
-  const nicheLabel = selectedNicheId === 'all' ? 'All Niches' : (selectedNiche ? selectedNiche.name : '');
+  const nicheLabel = selectedNicheId === 'all' ? 'All niches' : (selectedNiche ? selectedNiche.name : '');
+  const monthsList = stats?.availableMonths?.length ? stats.availableMonths : [];
+  const periodLabel = selectedMonth === 'all' ? 'all time' : (monthsList.find((m: any) => m.key === selectedMonth)?.label ?? selectedMonth);
 
-  // Prepare Pie / Donut Chart Data
-  const pieData = STATUS_CONFIG.map(s => ({
-    name: s.label,
-    value: stats?.statusCounts?.[s.key] ?? 0,
-    color: s.chartColor
-  })).filter(d => d.value > 0);
-
-  // Dynamic available months list across the entire database
-  const monthsList = stats?.availableMonths && stats.availableMonths.length > 0
-    ? stats.availableMonths
-    : [
-        { key: '2026-09', label: 'Sep 2026' },
-        { key: '2026-08', label: 'Aug 2026' },
-        { key: '2026-07', label: 'Jul 2026' },
-        { key: '2026-06', label: 'Jun 2026' },
-      ];
-
-  const VelocityTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border border-slate-700/80 text-white p-3 rounded-xl shadow-xl min-w-[150px]">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">{label}</p>
-          <div className="space-y-1.5">
-            {payload.map((entry: any) => (
-              <div key={entry.name} className="flex items-center justify-between text-xs gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.stroke }} />
-                  <span className="text-slate-300 font-medium">{entry.name}:</span>
-                </div>
-                <span className="font-bold text-white tabular-nums">{entry.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
+  const counts = stats?.statusCounts ?? {};
+  const total = stats?.total ?? 0;
+  const contacted = total - (counts['New Lead'] || 0);
+  const booked = (counts['Appointment'] || 0) + (counts['Closed'] || 0);
+  const won = counts['Closed'] || 0;
+  const funnel = [
+    { label: 'Leads', value: total, hint: 'In this view' },
+    { label: 'Contacted', value: contacted, hint: 'Moved past New lead' },
+    { label: 'Booked', value: booked, hint: 'Appointment or closed' },
+    { label: 'Won', value: won, hint: 'Closed deals' },
+  ];
+  const trendTotals = (stats?.trendData ?? []).reduce(
+    (acc: Record<SeriesKey, number>, d: any) => ({
+      leads: acc.leads + d.leads,
+      appointments: acc.appointments + d.appointments,
+      closed: acc.closed + d.closed,
+    }),
+    { leads: 0, appointments: 0, closed: 0 }
+  );
 
   return (
     <div className="space-y-5">
-      {/* Filter Section: Niche Selector & Date Range Selector */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-3">
-        {/* Row 1: Niche Selector */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-1 flex items-center gap-1">
-            <Globe className="h-3 w-3" /> Niche:
-          </span>
-          <button
-            onClick={() => setSelectedNicheId('all')}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5',
-              selectedNicheId === 'all'
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm'
-                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-            )}
-          >
+      {/* Filters */}
+      <div className="surface p-3 sm:p-4 space-y-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 -mb-0.5">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-14 shrink-0">Niche</span>
+          <button onClick={() => setSelectedNicheId('all')} className={chipClass(selectedNicheId === 'all')}>
             <Globe className="h-3.5 w-3.5" />
-            <span>All Niches</span>
+            All niches
           </button>
           {niches.map(n => {
             const IconComp = getNicheIcon(n.icon);
-            const isSelected = selectedNicheId === n._id;
             return (
-              <button
-                key={n._id}
-                onClick={() => setSelectedNicheId(n._id)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5',
-                  isSelected
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm'
-                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                )}
-              >
+              <button key={n._id} onClick={() => setSelectedNicheId(n._id)} className={chipClass(selectedNicheId === n._id)}>
                 <IconComp className="h-3.5 w-3.5 shrink-0" />
-                <span>{n.name}</span>
+                {n.name}
               </button>
             );
           })}
         </div>
-
-        {/* Row 2: Date Selector (All Time + All months listed by month name) */}
-        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-800/80">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-1 flex items-center gap-1">
-            <Calendar className="h-3 w-3" /> Period:
-          </span>
-          <button
-            onClick={() => setSelectedMonth('all')}
-            className={cn(
-              'px-3 py-1 rounded-lg text-xs font-semibold border transition-all',
-              selectedMonth === 'all'
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm'
-                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-            )}
-          >
-            All Time
-          </button>
-
-          {/* All previous & current months listed by month name */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-3 border-t border-slate-100 dark:border-slate-800">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-14 shrink-0">Period</span>
+          <button onClick={() => setSelectedMonth('all')} className={chipClass(selectedMonth === 'all')}>All time</button>
           {monthsList.map((m: any) => (
-            <button
-              key={m.key}
-              onClick={() => setSelectedMonth(m.key)}
-              className={cn(
-                'px-3 py-1 rounded-lg text-xs font-semibold border transition-all tabular-nums',
-                selectedMonth === m.key
-                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm'
-                  : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-              )}
-            >
+            <button key={m.key} onClick={() => setSelectedMonth(m.key)} className={cn(chipClass(selectedMonth === m.key), 'tabular-nums')}>
               {m.label}
             </button>
           ))}
@@ -204,309 +145,173 @@ export default function LeadStatsPage() {
       </div>
 
       {error ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-sm">
-          <div className="h-14 w-14 rounded-2xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center mb-3">
-            <AlertCircle className="h-7 w-7 text-rose-500" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Backend Connection Required</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-sm">
-            Could not fetch lead stats. Please start your backend server on port 5000.
+        <div className="surface flex flex-col items-center justify-center py-16 px-8 text-center">
+          <span className="grid place-items-center h-12 w-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 mb-4">
+            <AlertCircle className="h-5 w-5" />
+          </span>
+          <h3 className="font-display text-lg font-medium text-slate-900 dark:text-slate-50">Couldn't load analytics</h3>
+          <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-1 mb-4 max-w-sm">
+            The server didn't respond ({error}). Check that the backend is running, then retry.
           </p>
-          <button
-            onClick={loadStats}
-            className="px-4 py-2 text-xs font-semibold bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 rounded-lg hover:opacity-90"
-          >
-            Retry Connection
-          </button>
+          <Button size="sm" onClick={loadStats}>
+            <RotateCw className="h-3.5 w-3.5 mr-1.5" /> Retry
+          </Button>
         </div>
       ) : isLoading || !stats ? (
-        <div className="animate-pulse space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[1,2,3,4].map(i => <div key={i} className="h-24 bg-muted rounded-2xl" />)}
-          </div>
+        <div className="animate-pulse space-y-4" aria-busy="true" aria-label="Loading analytics">
+          <div className="h-28 bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-            {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="h-20 bg-muted rounded-xl" />)}
+            {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-20 bg-slate-200/50 dark:bg-slate-900 rounded-xl" />)}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="h-72 bg-muted rounded-2xl" />
-            <div className="h-72 bg-muted rounded-2xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-4">
+            <div className="lg:col-span-7 h-80 bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
+            <div className="lg:col-span-3 h-80 bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
           </div>
-          <div className="h-80 bg-muted rounded-2xl" />
         </div>
       ) : (
         <>
-          {/* 4 KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Headline numbers */}
+          <section className="surface grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-slate-200/70 dark:divide-slate-800 overflow-hidden">
             {[
-              { label: 'Total Volume', value: stats.total, icon: Users, accent: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-50 dark:bg-blue-950/40', note: `${nicheLabel || 'All'} in period` },
-              { label: 'Active Pipeline', value: (stats.total - (stats.statusCounts?.['Closed'] || 0) - (stats.statusCounts?.['DNC'] || 0)), icon: TrendingUp, accent: 'text-sky-600 dark:text-sky-400', iconBg: 'bg-sky-50 dark:bg-sky-950/40', note: 'Engaged & in progress' },
-              { label: 'Booked Calls', value: `${stats.appointmentRate}%`, icon: CalendarCheck, accent: 'text-purple-600 dark:text-purple-400', iconBg: 'bg-purple-50 dark:bg-purple-950/40', note: `${stats.statusCounts?.['Appointment'] || 0} scheduled demos` },
-              { label: 'Closed Rate', value: `${stats.conversionRate}%`, icon: CheckCircle2, accent: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-50 dark:bg-emerald-950/40', note: `${stats.statusCounts?.['Closed'] || 0} deals won` },
-            ].map(card => (
-              <div key={card.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-[0_1px_3px_0_rgba(15,23,42,0.06)]">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{card.label}</span>
-                  <div className={cn('h-7 w-7 rounded-lg flex items-center justify-center', card.iconBg)}>
-                    <card.icon className={cn('h-3.5 w-3.5', card.accent)} strokeWidth={1.75} />
-                  </div>
-                </div>
-                <div className="text-2xl font-extrabold text-slate-900 dark:text-white tabular-nums">{card.value}</div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 font-medium">{card.note}</p>
+              { label: 'Leads', value: total.toLocaleString(), note: `${nicheLabel}, ${periodLabel}` },
+              { label: 'Active pipeline', value: (total - won - (counts['DNC'] || 0)).toLocaleString(), note: 'Not closed and not DNC' },
+              { label: 'Booking rate', value: `${stats.appointmentRate}%`, note: `${counts['Appointment'] || 0} appointments set` },
+              { label: 'Close rate', value: `${stats.conversionRate}%`, note: `${won} deals won`, accent: true },
+            ].map((card) => (
+              <div key={card.label} className="px-5 py-4 sm:px-6 sm:py-5">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{card.label}</p>
+                <p className={cn(
+                  'font-display text-[34px] leading-none mt-2 tabular-nums',
+                  card.accent ? 'text-clay-700 dark:text-clay-300' : 'text-slate-900 dark:text-slate-50'
+                )}>
+                  {card.value}
+                </p>
+                <p className="text-[11.5px] text-slate-500 dark:text-slate-400 mt-2 truncate">{card.note}</p>
               </div>
             ))}
-          </div>
+          </section>
 
-          {/* Status Breakdown Cards (8 Clickable Cards - Opens Exact Tab in Pipeline) */}
-          <div>
-            <div className="flex items-center justify-between px-1 mb-2.5">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Disposition Breakdown
-              </h4>
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">Click card to jump to pipeline tab</span>
+          {/* Status breakdown, each opens that tab in the pipeline */}
+          <section aria-labelledby="status-breakdown">
+            <div className="flex items-baseline justify-between px-1 mb-2.5">
+              <h3 id="status-breakdown" className="font-display text-lg font-medium text-slate-900 dark:text-slate-50">By status</h3>
+              <span className="text-[11.5px] text-slate-500 dark:text-slate-400">Select a status to open it in the pipeline</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
               {STATUS_CONFIG.map(s => {
-                const count = stats.statusCounts?.[s.key] ?? 0;
-                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+                const count = counts[s.key] ?? 0;
+                const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                const color = STATUS_COLORS[s.key];
                 return (
                   <button
                     key={s.key}
-                    onClick={() => handleStatusCardClick(s.nav)}
-                    className={cn(
-                      'text-left rounded-xl border p-3 flex flex-col gap-1.5 transition-all hover:scale-[1.02] hover:shadow-sm active:scale-[0.98] cursor-pointer',
-                      s.bg, s.border
-                    )}
+                    onClick={() => openPipeline(s.key)}
+                    className="group surface !rounded-xl text-left p-3 flex flex-col gap-2 transition-all hover:-translate-y-px hover:border-clay-300 dark:hover:border-clay-800 active:translate-y-0"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="h-6 w-6 rounded-md flex items-center justify-center bg-white/70 dark:bg-slate-900/60 shadow-xs">
-                        <s.icon className={cn('h-3 w-3', s.color)} strokeWidth={1.75} />
-                      </div>
-                      <span className={cn('text-[9px] font-bold px-1 rounded-full bg-white/80 dark:bg-slate-900/80', s.color)}>{pct}%</span>
+                      <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-600 dark:text-slate-300 truncate">
+                        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', color.dot)} />
+                        {s.label}
+                      </span>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-clay-600 dark:group-hover:text-clay-400 transition-colors" />
                     </div>
-                    <div>
-                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate">{s.label}</p>
-                      <p className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">{count}</p>
+                    <div className="flex items-baseline justify-between">
+                      <span className="font-display text-2xl leading-none text-slate-900 dark:text-slate-50 tabular-nums">{count}</span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">{pct}%</span>
                     </div>
-                    <div className="h-1 rounded-full bg-black/5 dark:bg-white/5 overflow-hidden">
-                      <div className={cn('h-full rounded-full', s.dot)} style={{ width: `${pct}%` }} />
+                    <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className={cn('h-full rounded-full', color.dot)} style={{ width: `${pct}%` }} />
                     </div>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          {/* Combined Charts Row: 70% Performance Velocity & 30% Pipeline Share Donut (Vertical) */}
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-4 items-stretch">
-            {/* Left 70%: Performance Velocity & Pipeline Conversion */}
-            <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-[0_1px_3px_0_rgba(15,23,42,0.08)] flex flex-col justify-between">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            {/* Daily trend */}
+            <section className="lg:col-span-7 surface p-5 sm:p-6 flex flex-col">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">Performance Velocity &amp; Pipeline Conversion</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    {nicheLabel} — daily comparison of leads captured, calls booked, and deals closed
+                  <h3 className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Daily pipeline</h3>
+                  <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {nicheLabel}, {selectedMonth === 'all' ? 'last 30 days' : periodLabel}, by the day each lead was added
                   </p>
                 </div>
-
-                {/* Metric Filter Tabs */}
-                <div className="flex p-0.5 bg-slate-100 dark:bg-slate-800/80 rounded-lg border border-slate-200/70 dark:border-slate-700/60 self-start sm:self-auto">
-                  <button
-                    onClick={() => setActiveVelocityMetric('all')}
-                    className={cn(
-                      "text-xs font-semibold px-2.5 py-1 rounded-md transition-all",
-                      activeVelocityMetric === 'all'
-                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    )}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setActiveVelocityMetric('leads')}
-                    className={cn(
-                      "text-xs font-semibold px-2.5 py-1 rounded-md transition-all",
-                      activeVelocityMetric === 'leads'
-                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-bold"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    )}
-                  >
-                    Leads
-                  </button>
-                  <button
-                    onClick={() => setActiveVelocityMetric('appointments')}
-                    className={cn(
-                      "text-xs font-semibold px-2.5 py-1 rounded-md transition-all",
-                      activeVelocityMetric === 'appointments'
-                        ? "bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-sm font-bold"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    )}
-                  >
-                    Appointments
-                  </button>
-                  <button
-                    onClick={() => setActiveVelocityMetric('closed')}
-                    className={cn(
-                      "text-xs font-semibold px-2.5 py-1 rounded-md transition-all",
-                      activeVelocityMetric === 'closed'
-                        ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    )}
-                  >
-                    Closed
-                  </button>
-                </div>
+                <ChartLegend
+                  items={[
+                    { label: 'Leads', color: seriesColor.leads, value: trendTotals.leads, active: visible.leads, onToggle: () => toggleSeries('leads') },
+                    { label: 'Appointments', color: seriesColor.appointments, value: trendTotals.appointments, active: visible.appointments, onToggle: () => toggleSeries('appointments') },
+                    { label: 'Closed', color: seriesColor.closed, value: trendTotals.closed, active: visible.closed, onToggle: () => toggleSeries('closed') },
+                  ]}
+                />
               </div>
 
-              {/* Chart Container */}
-              <div className="h-[270px] w-full">
+              <div className="h-[280px] w-full mt-auto">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={stats.trendData || []} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <AreaChart data={stats.trendData || []} margin={{ top: 8, right: 8, left: -6, bottom: 0 }}>
                     <defs>
-                      {/* Theme-Adaptive Leads Gradient */}
-                      <linearGradient id="velocityDynamicLeads" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={leadColor} stopOpacity={isDark ? 0.35 : 0.25} />
-                        <stop offset="95%" stopColor={leadColor} stopOpacity={0.01} />
-                      </linearGradient>
-                      {/* Electric Blue/Sky Gradient for Appointments */}
-                      <linearGradient id="velocityDynamicApps" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={apptColor} stopOpacity={0.35} />
-                        <stop offset="95%" stopColor={apptColor} stopOpacity={0.02} />
-                      </linearGradient>
-                      {/* Emerald Gradient for Closed */}
-                      <linearGradient id="velocityDynamicClosed" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={closedColor} stopOpacity={0.35} />
-                        <stop offset="95%" stopColor={closedColor} stopOpacity={0.02} />
-                      </linearGradient>
+                      {(Object.keys(seriesColor) as SeriesKey[]).map((key) => (
+                        <linearGradient key={key} id={`velocity-${key}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={seriesColor[key]} stopOpacity={key === 'leads' ? (theme.isDark ? 0.26 : 0.18) : 0.1} />
+                          <stop offset="100%" stopColor={seriesColor[key]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200/80 dark:text-slate-800/80" />
-                    <XAxis 
-                      dataKey="date" 
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: 'currentColor' }}
-                      className="text-slate-400 dark:text-slate-500 font-medium"
-                      dy={10}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis 
-                      axisLine={false}
-                      tickLine={false}
-                      allowDecimals={false}
-                      tick={{ fontSize: 10, fill: 'currentColor' }}
-                      className="text-slate-400 dark:text-slate-500 font-medium"
-                    />
-                    <Tooltip content={<VelocityTooltip />} />
-
-                    {(activeVelocityMetric === 'all' || activeVelocityMetric === 'leads') && (
-                      <Area 
-                        type="monotone" 
-                        dataKey="leads" 
-                        name="Leads"
-                        stroke={leadColor} 
-                        strokeWidth={2.5}
-                        fillOpacity={1} 
-                        fill="url(#velocityDynamicLeads)" 
-                      />
+                    <CartesianGrid {...theme.grid} />
+                    <XAxis dataKey="date" {...theme.axis} interval="preserveStartEnd" minTickGap={24} />
+                    <YAxis {...theme.axis} allowDecimals={false} width={48} />
+                    <Tooltip content={<SeriesTooltip />} cursor={theme.cursor} />
+                    {visible.leads && (
+                      <Area type="monotone" dataKey="leads" name="Leads" stroke={seriesColor.leads} strokeWidth={2} fill="url(#velocity-leads)" activeDot={theme.activeDot(seriesColor.leads)} />
                     )}
-
-                    {(activeVelocityMetric === 'all' || activeVelocityMetric === 'appointments') && (
-                      <Area 
-                        type="monotone" 
-                        dataKey="appointments" 
-                        name="Appointments"
-                        stroke={apptColor} 
-                        strokeWidth={2.5}
-                        fillOpacity={1} 
-                        fill="url(#velocityDynamicApps)" 
-                      />
+                    {visible.appointments && (
+                      <Area type="monotone" dataKey="appointments" name="Appointments" stroke={seriesColor.appointments} strokeWidth={2} fill="url(#velocity-appointments)" activeDot={theme.activeDot(seriesColor.appointments)} />
                     )}
-
-                    {(activeVelocityMetric === 'all' || activeVelocityMetric === 'closed') && (
-                      <Area 
-                        type="monotone" 
-                        dataKey="closed" 
-                        name="Closed Won"
-                        stroke={closedColor} 
-                        strokeWidth={2.5}
-                        fillOpacity={1} 
-                        fill="url(#velocityDynamicClosed)" 
-                      />
+                    {visible.closed && (
+                      <Area type="monotone" dataKey="closed" name="Closed" stroke={seriesColor.closed} strokeWidth={2} fill="url(#velocity-closed)" activeDot={theme.activeDot(seriesColor.closed)} />
                     )}
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+            </section>
 
-              <div className="flex items-center justify-center gap-6 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60 text-xs flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: leadColor }} />
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">Leads Recorded</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: apptColor }} />
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">Appointments Booked</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: closedColor }} />
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">Deals Closed</span>
-                </div>
-              </div>
-            </div>
+            {/* Conversion funnel */}
+            <section className="lg:col-span-3 surface p-5 sm:p-6 flex flex-col">
+              <h3 className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Conversion</h3>
+              <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">How far leads in this view have moved</p>
 
-            {/* Right 30%: Vertical Pipeline Share Donut Chart */}
-            <div className="lg:col-span-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-[0_1px_3px_0_rgba(15,23,42,0.06)] flex flex-col justify-between">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Pipeline Share by Status</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                  Distribution of leads in {nicheLabel}
-                </p>
-              </div>
-
-              {/* Centered Donut & Vertical List */}
-              <div className="flex flex-col items-center gap-3 my-auto py-2">
-                <div className="relative w-44 h-44 shrink-0 flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={75}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  {/* Central Ring Label */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                    <span className="text-[11px] text-slate-400 font-medium">Total</span>
-                    <span className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">{stats.total}</span>
-                    <span className="text-[10px] text-emerald-600 font-bold">{stats.conversionRate}% won</span>
-                  </div>
-                </div>
-
-                {/* Circular Legend Grid */}
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 w-full text-xs">
-                  {STATUS_CONFIG.map(s => {
-                    const count = stats.statusCounts?.[s.key] ?? 0;
-                    return (
-                      <div key={s.key} className="flex items-center justify-between py-0.5 border-b border-slate-50 dark:border-slate-800/60">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className={cn('h-2 w-2 rounded-full shrink-0', s.dot)} />
-                          <span className="text-slate-600 dark:text-slate-400 truncate text-[11px]">{s.label}</span>
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white tabular-nums ml-1.5">{count}</span>
+              <ol className="mt-6 space-y-4 flex-1">
+                {funnel.map((step, i) => {
+                  const pct = total > 0 ? (step.value / total) * 100 : 0;
+                  const prev = i > 0 ? funnel[i - 1].value : null;
+                  const stepRate = prev ? Math.round((step.value / prev) * 100) : null;
+                  return (
+                    <li key={step.label}>
+                      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                        <span className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{step.label}</span>
+                        <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-50 tabular-nums">
+                          {step.value}
+                          {stepRate !== null && (
+                            <span className="ml-1.5 text-[11px] font-normal text-slate-500 dark:text-slate-400">{stepRate}% of prev.</span>
+                          )}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+                      <div className="h-7 rounded-md bg-slate-100 dark:bg-slate-800 overflow-hidden" title={step.hint}>
+                        <div
+                          className="h-full rounded-md transition-[width] duration-500 ease-out"
+                          style={{
+                            width: `${Math.max(pct, step.value > 0 ? 2 : 0)}%`,
+                            backgroundColor: theme.colors.clay,
+                          }}
+                        />
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{step.hint}</p>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
           </div>
         </>
       )}

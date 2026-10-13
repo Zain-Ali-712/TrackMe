@@ -61,7 +61,7 @@ export default function RescheduleDialog({
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent className="sm:max-w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <DialogTitle className="font-display text-xl font-medium text-slate-900 dark:text-slate-50 flex items-center gap-2">
             <CalendarClock className="h-4 w-4 text-purple-600 dark:text-purple-400" />
             <span>Reschedule Appointment</span>
           </DialogTitle>

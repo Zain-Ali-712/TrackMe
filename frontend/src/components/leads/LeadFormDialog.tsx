@@ -129,7 +129,7 @@ export default function LeadFormDialog({ open, onClose, onSubmit, lead, nicheId 
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} className="rounded-lg">Cancel</Button>
-            <Button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 shadow-sm shadow-slate-900/10 font-semibold rounded-lg">
+            <Button type="submit" className="rounded-lg">
               {lead ? 'Save Changes' : 'Create Lead'}
             </Button>
           </DialogFooter>

@@ -95,7 +95,7 @@ export default function HabitFormDialog({ open, onClose, onSubmit, onDelete, hab
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent className="sm:max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold text-slate-900 dark:text-white">
+          <DialogTitle className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">
             {habit ? 'Edit Habit' : 'Create New Habit'}
           </DialogTitle>
         </DialogHeader>
@@ -192,7 +192,7 @@ export default function HabitFormDialog({ open, onClose, onSubmit, onDelete, hab
               <Button
                 type="submit"
                 disabled={isSubmitting || !name.trim()}
-                className="h-8.5 px-4 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 rounded-lg shadow-sm"
+                className="h-8.5 px-4 text-xs font-semibold rounded-lg shadow-sm"
               >
                 {habit ? 'Save Changes' : 'Create Habit'}
               </Button>

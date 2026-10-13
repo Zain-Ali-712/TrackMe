@@ -18,7 +18,13 @@ const leadSchema = new mongoose.Schema(
     followUpDate: { type: Date },
     followUpNotes: { type: String },
     coldCalled: { type: Boolean, default: false },
-    coldCalledAt: { type: Date }
+    coldCalledAt: { type: Date },
+    // Call-prep fields. Kept separate from `notes`: they describe how to pitch
+    // the lead, not the history of what happened with it.
+    bestCallTime: { type: String, trim: true, default: '' },
+    problem: { type: String, default: '' },
+    solution: { type: String, default: '' },
+    coldCallQuestions: { type: String, default: '' }
   },
   { timestamps: true }
 );

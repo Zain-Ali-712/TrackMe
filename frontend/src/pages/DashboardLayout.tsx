@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarCheck, Sun, Moon, Menu, X, Plus, Layers, CheckSquare, BarChart2, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { LayoutDashboard, Users, CalendarCheck, Sun, Moon, Menu, X, Layers, CheckSquare, BarChart2, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LeadFormDialog from '@/components/leads/LeadFormDialog';
 import { createLead } from '@/lib/api';
@@ -51,12 +50,12 @@ export default function DashboardLayout() {
   };
 
   const getPageInfo = () => {
-    if (location.pathname === '/dashboard') return { title: 'Dashboard', subtitle: 'Overview & pipeline analytics' };
-    if (location.pathname.includes('/lead-stats')) return { title: 'Lead Analytics', subtitle: 'Per-niche deep-dive stats & charts' };
-    if (location.pathname.includes('/leads')) return { title: 'Leads & Niches', subtitle: 'Organize prospects by vertical' };
-    if (location.pathname.includes('/appointments')) return { title: 'Appointments', subtitle: 'Scheduled calls and meetings' };
-    if (location.pathname.includes('/habits')) return { title: 'Habit Tracker', subtitle: 'Daily & monthly routine matrix' };
-    return { title: 'Dashboard', subtitle: 'Overview & pipeline analytics' };
+    if (location.pathname === '/dashboard') return { title: 'Dashboard', subtitle: 'Today at a glance' };
+    if (location.pathname.includes('/lead-stats')) return { title: 'Lead analytics', subtitle: 'How each niche is converting' };
+    if (location.pathname.includes('/leads')) return { title: 'Leads', subtitle: 'Your pipeline, by niche and status' };
+    if (location.pathname.includes('/appointments')) return { title: 'Appointments', subtitle: 'Booked calls and meetings' };
+    if (location.pathname.includes('/habits')) return { title: 'Habits', subtitle: 'Daily routine and monthly score' };
+    return { title: 'Dashboard', subtitle: 'Today at a glance' };
   };
 
   const handleAddLead = async (data: any) => {
@@ -72,77 +71,64 @@ export default function DashboardLayout() {
 
   const navLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/dashboard/leads', label: 'Leads Pipeline', icon: Users },
-    { to: '/dashboard/lead-stats', label: 'Lead Analytics', icon: BarChart2 },
+    { to: '/dashboard/leads', label: 'Leads', icon: Users },
+    { to: '/dashboard/lead-stats', label: 'Analytics', icon: BarChart2 },
     { to: '/dashboard/appointments', label: 'Appointments', icon: CalendarCheck },
-    { to: '/dashboard/habits', label: 'Habit Tracker', icon: CheckSquare },
+    { to: '/dashboard/habits', label: 'Habits', icon: CheckSquare },
   ];
 
   const pageInfo = getPageInfo();
 
+  const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 flex text-slate-900 dark:text-slate-100 font-sans">
-      {/* Mobile Overlay */}
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex text-slate-900 dark:text-slate-100 font-sans">
+      {/* Mobile overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-[rgb(28_22_16/0.45)] backdrop-blur-[2px] lg:hidden"
           onClick={closeMobileMenu}
         />
       )}
 
-      {/* Modern Executive Slate Sidebar with Technical Pattern & Collapsible Rail */}
+      {/* Sidebar, collapsible to an icon rail on desktop */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 transform flex flex-col transition-all duration-200 ease-in-out lg:static lg:shrink-0",
-          isCollapsed ? "lg:w-[68px] w-64" : "w-64",
-          "sidebar-pattern border-r border-slate-200/90 dark:border-slate-800 shadow-[3px_0_16px_rgba(15,23,42,0.03)]",
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          "fixed inset-y-0 left-0 z-50 transform flex flex-col transition-all duration-200 ease-out lg:static lg:shrink-0",
+          isCollapsed ? "lg:w-[72px] w-64" : "w-64",
+          "sidebar-surface border-r border-slate-200/90 dark:border-slate-800",
+          isMobileMenuOpen ? "translate-x-0 shadow-raised" : "-translate-x-full lg:translate-x-0"
         )}
       >
-        {/* Brand Header */}
-        <div className={cn(
-          "flex h-16 shrink-0 items-center border-b border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm gap-2.5",
-          isCollapsed ? "px-3 justify-between" : "px-5"
-        )}>
-          <div className="h-9 w-9 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 flex items-center justify-center font-bold shadow-sm shadow-slate-900/15 shrink-0">
-            <Layers className="h-5 w-5" strokeWidth={2} />
+        {/* Brand */}
+        <div className={cn("flex h-16 shrink-0 items-center gap-2.5", isCollapsed ? "px-3.5 justify-between" : "px-5")}>
+          <div className="relative h-9 w-9 rounded-[10px] bg-gradient-to-b from-clay-500 to-clay-700 text-white flex items-center justify-center shrink-0 shadow-[0_1px_2px_rgba(120,50,20,0.3),inset_0_1px_0_rgba(255,255,255,0.18)]">
+            <Layers className="h-[18px] w-[18px]" strokeWidth={2} />
           </div>
-          
+
           {!isCollapsed && (
-            <div className="overflow-hidden truncate">
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white">TrackMe</span>
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 border border-blue-200 dark:border-blue-900">PRO</span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">Solo Lead Workspace</p>
+            <div className="min-w-0 leading-tight">
+              <span className="font-display text-[19px] font-medium text-slate-900 dark:text-slate-50">TrackMe</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Leads and daily habits</p>
             </div>
           )}
 
-          {/* Desktop collapse toggle button */}
           <button
             onClick={toggleCollapsed}
-            className={cn(
-              "hidden lg:flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
-              isCollapsed ? "ml-auto" : "ml-auto"
-            )}
+            className="hidden lg:flex ml-auto items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-900/[0.05] dark:hover:bg-white/[0.06] transition-colors"
             title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
 
-          {/* Mobile close button */}
-          <button className="ml-auto lg:hidden text-slate-500 hover:text-slate-900 dark:hover:text-white" onClick={closeMobileMenu}>
+          <button className="ml-auto lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white" onClick={closeMobileMenu} aria-label="Close menu">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav className={cn("flex-1 space-y-2 overflow-y-auto", isCollapsed ? "px-2.5 py-4" : "px-3.5 py-5")}>
-          {!isCollapsed && (
-            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Main Navigation
-            </div>
-          )}
+        {/* Navigation */}
+        <nav className={cn("flex-1 space-y-0.5 overflow-y-auto", isCollapsed ? "px-3 py-3" : "px-3 py-3")} aria-label="Main">
           {navLinks.map((link) => (
             <NavLink
               key={link.to}
@@ -152,81 +138,74 @@ export default function DashboardLayout() {
               title={isCollapsed ? link.label : undefined}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center rounded-xl text-xs font-semibold transition-all duration-150 border",
-                  isCollapsed ? "justify-center p-2.5" : "gap-3 px-3.5 py-2.5",
+                  "group flex items-center rounded-lg text-[13px] font-medium transition-colors",
+                  isCollapsed ? "justify-center h-10" : "gap-3 px-3 h-9",
                   isActive
-                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm shadow-slate-900/15"
-                    : "bg-white/80 dark:bg-slate-900/70 text-slate-600 dark:text-slate-300 border-slate-200/70 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                    ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow-card"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-900/[0.04] dark:hover:bg-white/[0.04]"
                 )
               }
             >
-              <link.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-              {!isCollapsed && <span className="truncate">{link.label}</span>}
+              {({ isActive }) => (
+                <>
+                  <link.icon
+                    className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-clay-600 dark:text-clay-400" : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300")}
+                    strokeWidth={isActive ? 2 : 1.75}
+                  />
+                  {!isCollapsed && <span className="truncate">{link.label}</span>}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
 
-        {/* Footer Area: Dark Mode Toggle */}
-        <div className={cn(
-          "shrink-0 mt-auto border-t border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm",
-          isCollapsed ? "p-2" : "p-3.5"
-        )}>
+        {/* Footer: appearance + sign out */}
+        <div className={cn("shrink-0 border-t border-slate-200/80 dark:border-slate-800 space-y-0.5", isCollapsed ? "p-3" : "p-3")}>
           <button
             onClick={toggleDark}
-            title={isCollapsed ? (isDark ? 'Switch to Light Appearance' : 'Switch to Dark Appearance') : undefined}
+            title={isDark ? 'Switch to light appearance' : 'Switch to dark appearance'}
             className={cn(
-              "flex w-full items-center rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]",
-              isCollapsed ? "justify-center p-2.5" : "justify-between px-3.5 py-2.5"
+              "flex w-full items-center rounded-lg text-[13px] font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-900/[0.04] dark:hover:bg-white/[0.04] transition-colors",
+              isCollapsed ? "justify-center h-10" : "gap-3 px-3 h-9"
             )}
           >
-            <div className="flex items-center gap-2.5">
-              {isDark ? <Sun className="h-4 w-4 text-amber-500 shrink-0" /> : <Moon className="h-4 w-4 text-slate-600 shrink-0" />}
-              {!isCollapsed && <span>{isDark ? 'Light Appearance' : 'Dark Appearance'}</span>}
-            </div>
-            {!isCollapsed && (
-              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                {isDark ? 'Dark' : 'Light'}
-              </span>
-            )}
+            {isDark ? <Sun className="h-4 w-4 shrink-0 text-slate-400" /> : <Moon className="h-4 w-4 shrink-0 text-slate-400" />}
+            {!isCollapsed && <span>{isDark ? 'Light appearance' : 'Dark appearance'}</span>}
           </button>
 
           <button
             onClick={handleSignOut}
-            title={isCollapsed ? 'Sign Out' : undefined}
+            title={isCollapsed ? 'Sign out' : undefined}
             className={cn(
-              "flex w-full items-center rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-900 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]",
-              isCollapsed ? "justify-center p-2.5" : "gap-2.5 px-3.5 py-2.5 mt-2"
+              "group flex w-full items-center rounded-lg text-[13px] font-medium text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors",
+              isCollapsed ? "justify-center h-10" : "gap-3 px-3 h-9"
             )}
           >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>Sign Out</span>}
+            <LogOut className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400" />
+            {!isCollapsed && <span>Sign out</span>}
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area with Ambient Dotted Grid Canvas Pattern */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden canvas-pattern">
-        {/* Top Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/90 dark:border-slate-800 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md px-4 sm:px-8 shadow-[0_1px_3px_0_rgba(15,23,42,0.04)]">
-          <div className="flex items-center gap-3.5">
+      {/* Main content on the lit canvas */}
+      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden canvas-surface">
+        <header className="flex h-[72px] shrink-0 items-center justify-between px-4 sm:px-8 border-b border-slate-900/[0.06] dark:border-white/[0.06]">
+          <div className="flex items-center gap-3 min-w-0">
             <button
-              className="lg:hidden p-2 -ml-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg dark:hover:bg-slate-800"
+              className="lg:hidden p-2 -ml-2 text-slate-500 hover:text-slate-900 hover:bg-slate-900/[0.05] rounded-lg dark:hover:bg-white/[0.06]"
               onClick={toggleMobileMenu}
+              aria-label="Open menu"
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div>
-              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">{pageInfo.title}</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block font-medium">{pageInfo.subtitle}</p>
+            <div className="min-w-0">
+              <h1 className="font-display text-[26px] leading-tight font-medium text-slate-900 dark:text-slate-50 truncate">{pageInfo.title}</h1>
+              <p className="text-[13px] text-slate-500 dark:text-slate-400 hidden sm:block truncate">{pageInfo.subtitle}</p>
             </div>
           </div>
-          
-          {/* Header Action section: New lead button removed per user request */}
-          <div className="flex items-center gap-3">
-          </div>
+          <p className="hidden md:block text-[13px] text-slate-500 dark:text-slate-400 tabular-nums">{today}</p>
         </header>
 
-        {/* Outlet Area */}
         <div className="flex-1 overflow-auto p-4 sm:p-8">
           <div className="mx-auto max-w-7xl">
             <Outlet />

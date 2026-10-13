@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, X, Upload, RotateCcw, Download } from 'lucide-react';
+import { Search, Plus, X, Upload, RotateCcw, Download, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchNiches, fetchLeads, updateLead, deleteLead, createLead, createNiche, updateNiche, deleteNiche, createAppointment, batchDeleteLeads } from '@/lib/api';
 import NicheTabBar from '@/components/leads/NicheTabBar';
 import LeadTable from '@/components/leads/LeadTable';
 import LeadFormDialog from '@/components/leads/LeadFormDialog';
+import LeadDetailDialog from '@/components/leads/LeadDetailDialog';
 import MultiNotesDialog, { serializeNoteEntries } from '@/components/common/MultiNotesDialog';
 import BookAppointmentDialog from '@/components/leads/BookAppointmentDialog';
 import NicheFormDialog from '@/components/NicheFormDialog';
 import { cn } from '@/lib/utils';
+import { buildHeaderMap, inferBestCallTime } from '@/lib/leadImport';
 import toast from 'react-hot-toast';
 
 const STATUS_TABS = [
@@ -19,7 +21,7 @@ const STATUS_TABS = [
   { value: 'Not Interested', label: 'Not Interested', dot: 'bg-rose-500' },
   { value: 'Callback',       label: 'Callback',       dot: 'bg-amber-500' },
   { value: 'Follow Up',      label: 'Follow Up',      dot: 'bg-sky-500' },
-  { value: 'Appointment',    label: 'Appointment',    dot: 'bg-blue-600' },
+  { value: 'Appointment',    label: 'Appointment',    dot: 'bg-clay-600' },
   { value: 'Closed',         label: 'Closed',         dot: 'bg-emerald-500' },
   { value: 'DNC',            label: 'DNC',            dot: 'bg-red-500' },
 ];
@@ -55,6 +57,9 @@ export default function LeadsPage() {
   const [isBookApptOpen, setIsBookApptOpen] = useState(false);
   const [bookApptLead, setBookApptLead] = useState<any | null>(null);
   const [isNicheFormOpen, setIsNicheFormOpen] = useState(false);
+  // Lead detail modal; read from `leads` so it always shows the latest data.
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
+  const detailLead = detailLeadId ? leads.find((l) => l._id === detailLeadId) ?? null : null;
   const [editingNiche, setEditingNiche] = useState<any | null>(null);
 
   useEffect(() => {
@@ -162,29 +167,28 @@ export default function LeadsPage() {
         return;
       }
 
-      // Column name mapping — case-insensitive, supports common variants
-      const normalize = (key: string) => key.toLowerCase().replace(/[\s_\-]/g, '');
-      const FIELD_MAP: Record<string, string> = {
-        businessname: 'businessName', business: 'businessName', company: 'businessName', name: 'businessName',
-        personname: 'personName', person: 'personName', contact: 'personName', contactname: 'personName', owner: 'personName',
-        phone: 'contact', phonenumber: 'contact', mobile: 'contact', number: 'contact', tel: 'contact',
-        email: 'email', emailaddress: 'email', mail: 'email',
-        website: 'website', url: 'website', web: 'website', site: 'website',
-        location: 'location', city: 'location', address: 'location', area: 'location',
-        notes: 'notes', note: 'notes', comments: 'notes', remark: 'notes', remarks: 'notes',
-        status: 'status',
-      };
+      // Fuzzy, case-insensitive header matching; unmatched fields stay empty.
+      const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+      const headerMap = buildHeaderMap(headers);
 
       let created = 0;
       let skipped = 0;
       const newlyCreatedIds: string[] = [];
       for (const row of rows) {
         const lead: any = { niche: assignedNiche, status: 'New Lead', coldCalled: false };
+        let businessHours = '';
         for (const [rawKey, val] of Object.entries(row)) {
-          const mappedField = FIELD_MAP[normalize(rawKey)];
-          if (mappedField && val !== '') {
-            lead[mappedField] = String(val).trim();
-          }
+          const mappedField = headerMap.get(rawKey);
+          const text = String(val ?? '').trim();
+          if (!mappedField || !text) continue;
+          if (mappedField === 'businessHours') businessHours = text;
+          else lead[mappedField] = text;
+        }
+        if (!lead.bestCallTime && businessHours) {
+          lead.bestCallTime = inferBestCallTime(businessHours);
+        }
+        if (lead.notes) {
+          lead.notes = serializeNoteEntries([{ id: `note-${Date.now()}-${created}`, text: lead.notes, createdAt: new Date().toISOString() }]);
         }
         // Require at least a business name to create the lead
         if (!lead.businessName) { skipped++; continue; }
@@ -268,6 +272,10 @@ export default function LeadsPage() {
           } catch {}
           return lead.notes || '';
         })(),
+        'Best Call Time': lead.bestCallTime || '',
+        'Problem': lead.problem || '',
+        'Solution': lead.solution || '',
+        'Cold Call Questions': lead.coldCallQuestions || '',
         'Created At': lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '',
       }));
 
@@ -306,6 +314,17 @@ export default function LeadsPage() {
       toast.error('Failed to update lead');
       loadLeads();
     }
+  };
+
+  // Call-prep edits from the detail modal save quietly; the modal shows its own status.
+  const handleSaveCallPrep = async (id: string, changes: Record<string, string>) => {
+    await updateLead(id, changes);
+    setLeads((prev) => prev.map((l) => (l._id === id ? { ...l, ...changes } : l)));
+  };
+
+  const openNotes = (lead: any) => {
+    setNotesLead(lead);
+    setIsNotesOpen(true);
   };
 
   const handleDeleteLead = async (id: string) => {
@@ -354,30 +373,32 @@ export default function LeadsPage() {
         onDeleteNiche={handleDeleteNiche}
       />
 
-      {/* Status Tabs Bar — Compact single row without horizontal scroll */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-1">
-        <div className="grid grid-cols-4 sm:grid-cols-8 gap-1 w-full">
+      {/* Status segmented control */}
+      <div role="tablist" aria-label="Lead status" className="rounded-xl bg-slate-200/50 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 p-1">
+        <div className="flex overflow-x-auto scrollbar-hide gap-0.5 w-full sm:grid sm:grid-cols-8">
           {STATUS_TABS.map((tab) => {
             const count = statusCounts[tab.value] ?? 0;
             const isActive = activeStatus === tab.value;
             return (
               <button
                 key={tab.value}
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setActiveStatus(tab.value)}
                 className={cn(
-                  'flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-150 border',
+                  'flex shrink-0 items-center justify-center gap-1.5 px-2.5 h-8 rounded-lg text-[12px] font-medium whitespace-nowrap transition-all duration-150',
                   isActive
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-sm'
-                    : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow-card'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-white/60 dark:hover:bg-slate-800/50'
                 )}
               >
-                <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', tab.dot, !isActive && 'opacity-60')} />
+                <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', tab.dot, !isActive && 'opacity-70')} />
                 <span className="truncate">{tab.label}</span>
                 <span className={cn(
-                  'ml-0.5 rounded-full px-1.5 py-0.2 text-[9px] font-bold tabular-nums',
+                  'rounded-md px-1.5 min-w-[1.25rem] text-[10px] font-semibold leading-[1.125rem] tabular-nums',
                   isActive
-                    ? 'bg-white/20 text-white dark:bg-slate-800 dark:text-slate-100'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    ? 'bg-clay-600 text-white dark:bg-clay-500 dark:text-slate-950'
+                    : 'bg-slate-900/[0.06] dark:bg-white/[0.07] text-slate-500 dark:text-slate-400'
                 )}>
                   {count}
                 </span>
@@ -387,102 +408,108 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Toolbar: Search + Add Lead button (triggers inline spreadsheet row) */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-2 h-3.5 w-3.5 text-slate-400" />
-          <Input
-            placeholder="Search by business, contact, location..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/50 rounded-lg focus-visible:ring-slate-900 dark:focus-visible:ring-slate-100"
-          />
-        </div>
+      {/* Table surface: toolbar + leads */}
+      <div className="flex-1 surface overflow-hidden flex flex-col min-h-0">
+        <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-between px-3 py-2.5 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="relative w-full sm:w-80">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <Input
+              type="search"
+              aria-label="Search leads"
+              placeholder="Search business, person or location"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-xs bg-slate-50 dark:bg-slate-850"
+            />
+          </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          {/* Hidden file input for Excel/CSV import */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={handleExcelImport}
-          />
+          <div className="flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-auto">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleExcelImport}
+            />
 
-          {/* Import from Excel button */}
-          <Button
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="w-full sm:w-auto h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            <Upload className="h-3.5 w-3.5 mr-1.5" />
-            {isImporting ? 'Importing...' : 'Import Excel'}
-          </Button>
+            {lastImportedLeadIds.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleUndoLastImport}
+                disabled={isUndoingImport || isImporting}
+                className="h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                title={`Delete the ${lastImportedLeadIds.length} leads created by the last import`}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                {isUndoingImport ? 'Undoing' : `Undo import (${lastImportedLeadIds.length})`}
+              </Button>
+            )}
 
-          {/* Export visible leads to Excel */}
-          <Button
-            variant="outline"
-            onClick={handleExcelExport}
-            disabled={filteredLeads.length === 0}
-            className="w-full sm:w-auto h-8 px-3 text-xs font-semibold rounded-lg border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:border-emerald-300 transition-colors disabled:opacity-40"
-            title={filteredLeads.length > 0 ? `Export ${filteredLeads.length} visible lead${filteredLeads.length > 1 ? 's' : ''} to Excel` : 'No leads to export'}
-          >
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export ({filteredLeads.length})
-          </Button>
-
-          {/* Undo Last Import Button */}
-          {lastImportedLeadIds.length > 0 && (
             <Button
               variant="outline"
-              onClick={handleUndoLastImport}
-              disabled={isUndoingImport || isImporting}
-              className="w-full sm:w-auto h-8 px-3 text-xs font-semibold rounded-lg border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-300 transition-colors"
-              title={`Undo last import (${lastImportedLeadIds.length} leads)`}
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="h-8 text-xs"
+              title="Import leads from .xlsx, .xls or .csv"
             >
-              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-              {isUndoingImport ? 'Undoing...' : `Undo Import (${lastImportedLeadIds.length})`}
+              {isImporting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Upload className="h-3.5 w-3.5 mr-1.5" />}
+              {isImporting ? 'Importing' : 'Import'}
             </Button>
-          )}
 
-          {isAddingLeadRow ? (
             <Button
               variant="outline"
-              onClick={() => setIsAddingLeadRow(false)}
-              className="w-full sm:w-auto h-8 px-3 text-xs font-semibold rounded-lg text-slate-600 dark:text-slate-300"
+              size="sm"
+              onClick={handleExcelExport}
+              disabled={filteredLeads.length === 0}
+              className="h-8 text-xs"
+              title={filteredLeads.length > 0 ? `Export ${filteredLeads.length} visible lead${filteredLeads.length > 1 ? 's' : ''} to Excel` : 'No leads to export'}
             >
-              <X className="h-3.5 w-3.5 mr-1" />
-              Cancel New Row
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export
+              <span className="ml-1.5 text-slate-400 tabular-nums">{filteredLeads.length}</span>
             </Button>
-          ) : (
-            <Button
-              onClick={() => setIsAddingLeadRow(true)}
-              className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 h-8 px-3.5 text-xs font-semibold shadow-sm shadow-slate-900/10 rounded-lg"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Add Lead (Inline)
-            </Button>
-          )}
-        </div>
-      </div>
 
-      {/* Lead Table Container with sticky header */}
-      <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-[0_1px_3px_0_rgba(15,23,42,0.06)] overflow-hidden flex flex-col min-h-0">
+            {isAddingLeadRow ? (
+              <Button variant="outline" size="sm" onClick={() => setIsAddingLeadRow(false)} className="h-8 text-xs">
+                <X className="h-3.5 w-3.5 mr-1" />
+                Cancel new row
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setIsAddingLeadRow(true)} className="h-8 text-xs px-3.5">
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add lead
+              </Button>
+            )}
+          </div>
+        </div>
+
         <LeadTable
           leads={filteredLeads}
           isLoading={isLoading}
           onUpdateLead={handleUpdateLeadInline}
           onDeleteLead={handleDeleteLead}
-          onViewNotes={(lead) => { setNotesLead(lead); setIsNotesOpen(true); }}
+          onViewNotes={openNotes}
           onBookAppointment={(lead) => { setBookApptLead(lead); setIsBookApptOpen(true); }}
           onEdit={(lead) => { setEditingLead(lead); setIsLeadFormOpen(true); }}
+          onOpenLead={(lead) => setDetailLeadId(lead._id)}
+          activeLeadId={detailLeadId}
           isAddingRow={isAddingLeadRow}
           onSaveNewLead={handleSaveInlineNewLead}
           onCancelNewLead={() => setIsAddingLeadRow(false)}
-          activeStatus={activeStatus}
         />
       </div>
+
+      <LeadDetailDialog
+        lead={detailLead}
+        open={!!detailLead}
+        onClose={() => setDetailLeadId(null)}
+        onSave={handleSaveCallPrep}
+        onOpenNotes={openNotes}
+        onEdit={(lead) => { setEditingLead(lead); setIsLeadFormOpen(true); }}
+        onBookAppointment={(lead) => { setBookApptLead(lead); setIsBookApptOpen(true); }}
+      />
 
       {/* Dialogs for details / appointments */}
       <LeadFormDialog

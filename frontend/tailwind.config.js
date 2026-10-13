@@ -17,9 +17,25 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Geist', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['Newsreader', 'Georgia', 'serif'],
       },
       colors: {
+        white: 'rgb(var(--color-white) / <alpha-value>)',
+        // Accent: Claude-style clay
+        clay: {
+          50: '#FBF4EF',
+          100: '#F6E5DA',
+          200: '#EDCBB7',
+          300: '#E2A98B',
+          400: '#D98864',
+          500: '#CE714C',
+          600: '#C15F3C',
+          700: '#A14C2F',
+          800: '#813E28',
+          900: '#693423',
+          950: '#3A1B11',
+        },
         slate: {
           50: 'rgb(var(--color-slate-50) / <alpha-value>)',
           100: 'rgb(var(--color-slate-100) / <alpha-value>)',

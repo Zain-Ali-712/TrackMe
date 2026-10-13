@@ -11,13 +11,13 @@ export const STATUS_COLORS: Record<string, { bg: string, text: string, border: s
   'Not Interested': { bg: "bg-rose-50/80 dark:bg-rose-950/30", text: "text-rose-700 dark:text-rose-300", border: "border-rose-200/80 dark:border-rose-900/40", dot: "bg-rose-500" },
   'Callback': { bg: "bg-amber-50/80 dark:bg-amber-950/30", text: "text-amber-700 dark:text-amber-300", border: "border-amber-200/80 dark:border-amber-900/40", dot: "bg-amber-500" },
   'Follow Up': { bg: "bg-sky-50/80 dark:bg-sky-950/30", text: "text-sky-700 dark:text-sky-300", border: "border-sky-200/80 dark:border-sky-900/40", dot: "bg-sky-500" },
-  'Appointment': { bg: "bg-blue-50/90 dark:bg-blue-950/40", text: "text-blue-700 dark:text-blue-300", border: "border-blue-200 dark:border-blue-800/60", dot: "bg-blue-600" },
+  'Appointment': { bg: "bg-clay-50/90 dark:bg-clay-950/40", text: "text-clay-700 dark:text-clay-300", border: "border-clay-200 dark:border-clay-800/60", dot: "bg-clay-600" },
   'Closed': { bg: "bg-emerald-50/80 dark:bg-emerald-950/30", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-200/80 dark:border-emerald-900/40", dot: "bg-emerald-500" },
   'DNC': { bg: "bg-red-50/80 dark:bg-red-950/30", text: "text-red-700 dark:text-red-300", border: "border-red-200/80 dark:border-red-900/40", dot: "bg-red-500" }
 };
 
 export const APPOINTMENT_STATUS_COLORS: Record<string, { bg: string, text: string, border: string, dot: string }> = {
-  'Scheduled': { bg: "bg-blue-50/90 dark:bg-blue-950/40", text: "text-blue-700 dark:text-blue-300", border: "border-blue-200 dark:border-blue-800/60", dot: "bg-blue-600" },
+  'Scheduled': { bg: "bg-clay-50/90 dark:bg-clay-950/40", text: "text-clay-700 dark:text-clay-300", border: "border-clay-200 dark:border-clay-800/60", dot: "bg-clay-600" },
   'Completed': { bg: "bg-emerald-50/80 dark:bg-emerald-950/30", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-200/80 dark:border-emerald-900/40", dot: "bg-emerald-500" },
   'No Show': { bg: "bg-slate-100 dark:bg-slate-800/60", text: "text-slate-700 dark:text-slate-300", border: "border-slate-300/70 dark:border-slate-700", dot: "bg-slate-400" },
   'Cancelled': { bg: "bg-rose-50/80 dark:bg-rose-950/30", text: "text-rose-700 dark:text-rose-300", border: "border-rose-200/80 dark:border-rose-900/40", dot: "bg-rose-500" },

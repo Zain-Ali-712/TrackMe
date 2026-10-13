@@ -53,7 +53,7 @@ export default function BookAppointmentDialog({ open, onClose, lead, onSubmit }:
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent className="sm:max-w-[425px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold text-slate-900 dark:text-white">Book Appointment</DialogTitle>
+          <DialogTitle className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Book Appointment</DialogTitle>
           <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
             Schedule a meeting with <strong className="text-slate-800 dark:text-slate-200">{lead?.businessName || lead?.personName || 'this lead'}</strong>.
           </DialogDescription>
@@ -109,7 +109,7 @@ export default function BookAppointmentDialog({ open, onClose, lead, onSubmit }:
             <Button type="button" variant="outline" onClick={onClose} className="rounded-lg text-xs h-8 px-3">
               Cancel
             </Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs h-8 px-3.5 rounded-lg shadow-sm">
+            <Button type="submit" className="bg-clay-600 hover:bg-clay-500 text-white font-semibold text-xs h-8 px-3.5 rounded-lg shadow-sm">
               Book Meeting
             </Button>
           </DialogFooter>

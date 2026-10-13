@@ -30,22 +30,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100/70 dark:bg-slate-950 canvas-pattern px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100/70 dark:bg-slate-950 canvas-surface px-4">
       <div className="w-full max-w-sm">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-7 shadow-[0_1px_3px_0_rgba(15,23,42,0.08),0_1px_2px_-1px_rgba(15,23,42,0.06)]">
+        <div className="surface p-7 sm:p-8 shadow-raised">
           <div className="flex flex-col items-center mb-6">
-            <div className="h-12 w-12 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 flex items-center justify-center shadow-sm shadow-slate-900/15 mb-3.5">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-b from-clay-500 to-clay-700 text-white flex items-center justify-center shadow-[0_2px_6px_rgba(120,50,20,0.3),inset_0_1px_0_rgba(255,255,255,0.18)] mb-4">
               <Layers className="h-6 w-6" strokeWidth={2} />
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white">
+              <span className="font-display text-[28px] leading-none font-medium text-slate-900 dark:text-slate-50">
                 TrackMe
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 border border-blue-200 dark:border-blue-900">
-                PRO
-              </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2">
               Private workspace — enter your password
             </p>
           </div>
@@ -65,7 +62,7 @@ export default function LoginPage() {
                   autoFocus
                   autoComplete="current-password"
                   placeholder="••••••••••"
-                  className="h-10 pl-9 pr-10 text-sm rounded-lg bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                  className="h-10 pl-9 pr-10 text-sm"
                 />
                 <button
                   type="button"
@@ -88,7 +85,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={!password || isSubmitting}
-              className="w-full h-10 gap-2 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 rounded-lg font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-10 gap-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 'Checking…'
