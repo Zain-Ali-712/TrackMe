@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Mail, Globe, MapPin, Clock, CircleAlert, Lightbulb, MessagesSquare,
-  Copy, Check, ExternalLink, StickyNote, Pencil, CalendarPlus, Loader2, CircleCheck, TriangleAlert, User,
+  Copy, Check, ExternalLink, Store, StickyNote, Pencil, CalendarPlus, Loader2, CircleCheck, TriangleAlert, User,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -11,14 +11,15 @@ import { parseNoteEntries, getNotesCount } from '@/components/common/MultiNotesD
 import { STATUS_COLORS, cn, getNicheIcon } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-export type PrepField = 'bestCallTime' | 'problem' | 'solution' | 'coldCallQuestions';
-const PREP_FIELDS: PrepField[] = ['bestCallTime', 'problem', 'solution', 'coldCallQuestions'];
+export type PrepField = 'bestCallTime' | 'nearbyExamples' | 'problem' | 'solution' | 'coldCallQuestions';
+const PREP_FIELDS: PrepField[] = ['bestCallTime', 'nearbyExamples', 'problem', 'solution', 'coldCallQuestions'];
 
 type Draft = Record<PrepField, string>;
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 const draftFromLead = (lead: any): Draft => ({
   bestCallTime: lead?.bestCallTime || '',
+  nearbyExamples: lead?.nearbyExamples || '',
   problem: lead?.problem || '',
   solution: lead?.solution || '',
   coldCallQuestions: lead?.coldCallQuestions || '',
@@ -274,6 +275,18 @@ export default function LeadDetailDialog({
               </section>
             </div>
 
+            {/* Nearby examples to name-drop on the call */}
+            <PrepTextarea
+              id="prep-nearby"
+              icon={Store}
+              label="Nearby examples"
+              hint={lead.location ? `Businesses near ${lead.location} that already use what you're offering` : "Businesses near this lead that already use what you're offering"}
+              placeholder={'Up to 3, one per line, e.g.\nSmile Studio, 2 blocks away: online booking + SMS reminders (smilestudio.com)'}
+              value={draft.nearbyExamples}
+              onChange={(v) => setField('nearbyExamples', v)}
+              onBlur={commit}
+            />
+
             {/* Call prep */}
             <section aria-labelledby="call-prep" className="space-y-4">
               <h3 id="call-prep" className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">
@@ -348,10 +361,12 @@ function PrepTextarea({
   onChange,
   onBlur,
   minRows = 3,
+  hint,
 }: {
   id: string;
   icon: React.ElementType;
   label: string;
+  hint?: string;
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
@@ -363,6 +378,7 @@ function PrepTextarea({
       <label htmlFor={id} className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
         <Icon className="h-3.5 w-3.5 text-clay-600 dark:text-clay-400" />
         {label}
+        {hint && <span className="font-normal text-slate-400 dark:text-slate-500 truncate">· {hint}</span>}
       </label>
       <Textarea
         id={id}

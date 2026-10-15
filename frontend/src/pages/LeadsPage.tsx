@@ -273,6 +273,7 @@ export default function LeadsPage() {
           return lead.notes || '';
         })(),
         'Best Call Time': lead.bestCallTime || '',
+        'Nearby Examples': lead.nearbyExamples || '',
         'Problem': lead.problem || '',
         'Solution': lead.solution || '',
         'Cold Call Questions': lead.coldCallQuestions || '',

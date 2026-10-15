@@ -20,6 +20,7 @@ export type ImportField =
   | 'problem'
   | 'solution'
   | 'coldCallQuestions'
+  | 'nearbyExamples'
   // Not stored on the lead; only used to infer bestCallTime.
   | 'businessHours';
 
@@ -41,6 +42,11 @@ const RULES: FieldRule[] = [
     field: 'coldCallQuestions',
     aliases: ['coldcallquestions', 'questionstoask', 'callquestions', 'questions', 'question', 'discoveryquestions', 'qualifyingquestions'],
     keywords: [['question'], ['ask']],
+  },
+  {
+    field: 'nearbyExamples',
+    aliases: ['nearbyexamples', 'nearbyexample', 'nearby', 'localexamples', 'examples', 'nearbybusinesses', 'nearbycompetitors', 'competitors', 'referenceclients', 'casestudies'],
+    keywords: [['nearby'], ['example'], ['competitor']],
   },
   {
     field: 'problem',

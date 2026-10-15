@@ -24,7 +24,9 @@ const leadSchema = new mongoose.Schema(
     bestCallTime: { type: String, trim: true, default: '' },
     problem: { type: String, default: '' },
     solution: { type: String, default: '' },
-    coldCallQuestions: { type: String, default: '' }
+    coldCallQuestions: { type: String, default: '' },
+    // Nearby businesses to cite on the call as relatable proof
+    nearbyExamples: { type: String, default: '' }
   },
   { timestamps: true }
 );
