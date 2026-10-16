@@ -129,8 +129,6 @@ export const getLeadStats = async (req, res) => {
   try {
     const now = new Date();
 
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
     const startOfWeek = new Date(now);
     const day = startOfWeek.getDay(), diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff);
@@ -142,57 +140,69 @@ export const getLeadStats = async (req, res) => {
     startOf7DaysAgo.setDate(startOf7DaysAgo.getDate() - 6);
     startOf7DaysAgo.setHours(0, 0, 0, 0);
 
+    // A call counts on the day it was made. Older leads may lack coldCalledAt,
+    // so fall back to the last update and then creation, the same rule the
+    // habits page uses, so both screens always report the same numbers.
+    const callDate = { $ifNull: ['$coldCalledAt', { $ifNull: ['$updatedAt', '$createdAt'] }] };
+    // Bucket days in the server's own timezone (Mongo defaults to UTC), so the
+    // keys line up with the local dates built below.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const dayKey = (date) => ({ $dateToString: { format: '%Y-%m-%d', date, timezone } });
+
     const [
       totalLeads,
-      leadsToday,
       leadsThisWeek,
       leadsThisMonth,
       totalCalls,
-      callsThisWeek,
-      callsThisMonth,
+      callRows,
       upcomingAppointmentsList,
-      // One aggregation replaces the 14 countDocuments calls the 7-day trend
-      // used to make.
-      trendRows
+      leadTrendRows
     ] = await Promise.all([
       Lead.countDocuments(),
-      Lead.countDocuments({ createdAt: { $gte: startOfToday } }),
       Lead.countDocuments({ createdAt: { $gte: startOfWeek } }),
       Lead.countDocuments({ createdAt: { $gte: startOfMonth } }),
       Lead.countDocuments({ coldCalled: true }),
-      Lead.countDocuments({ coldCalled: true, coldCalledAt: { $gte: startOfWeek } }),
-      Lead.countDocuments({ coldCalled: true, coldCalledAt: { $gte: startOfMonth } }),
+      // Week, month and 7-day counts of calls, all by the date of the call.
+      Lead.aggregate([
+        { $match: { coldCalled: true } },
+        { $project: { callAt: callDate } },
+        {
+          $facet: {
+            week: [{ $match: { callAt: { $gte: startOfWeek } } }, { $count: 'n' }],
+            month: [{ $match: { callAt: { $gte: startOfMonth } } }, { $count: 'n' }],
+            byDay: [
+              { $match: { callAt: { $gte: startOf7DaysAgo } } },
+              { $group: { _id: dayKey('$callAt'), calls: { $sum: 1 } } }
+            ]
+          }
+        }
+      ]),
       Appointment.find({ dateTime: { $gte: now }, status: 'Scheduled' })
         .populate('lead', 'businessName personName')
         .sort({ dateTime: 1 })
         .limit(5),
       Lead.aggregate([
         { $match: { createdAt: { $gte: startOf7DaysAgo } } },
-        {
-          $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-            leads: { $sum: 1 },
-            calls: {
-              $sum: { $cond: [{ $eq: ['$coldCalled', true] }, 1, 0] }
-            }
-          }
-        }
+        { $group: { _id: dayKey('$createdAt'), leads: { $sum: 1 } } }
       ])
     ]);
 
-    const trendByDate = new Map(trendRows.map((row) => [row._id, row]));
+    const calls = callRows[0] || { week: [], month: [], byDay: [] };
+    const callsThisWeek = calls.week[0]?.n || 0;
+    const callsThisMonth = calls.month[0]?.n || 0;
+    const leadsByDate = new Map(leadTrendRows.map((row) => [row._id, row.leads]));
+    const callsByDate = new Map(calls.byDay.map((row) => [row._id, row.calls]));
 
     const chartData = [];
     for (let i = 0; i < 7; i++) {
       const dayStart = new Date(startOf7DaysAgo);
       dayStart.setDate(dayStart.getDate() + i);
       const key = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
-      const row = trendByDate.get(key);
 
       chartData.push({
         date: dayStart.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
-        leads: row?.leads || 0,
-        calls: row?.calls || 0
+        leads: leadsByDate.get(key) || 0,
+        calls: callsByDate.get(key) || 0
       });
     }
 
