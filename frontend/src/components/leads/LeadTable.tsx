@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ExternalLink, Edit2, CalendarPlus, Trash2, MoreHorizontal, Check, X, PhoneCall, PanelRightOpen, Plus, Inbox, StickyNote } from 'lucide-react';
+import { ExternalLink, CalendarPlus, Trash2, MoreHorizontal, Check, X, PhoneCall, PanelRightOpen, Plus, Inbox, StickyNote } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ interface LeadTableProps {
   onDeleteLead: (id: string) => void;
   onViewNotes: (lead: any) => void;
   onBookAppointment: (lead: any) => void;
-  onEdit: (lead: any) => void;
   onOpenLead: (lead: any) => void;
   activeLeadId?: string | null;
   isAddingRow?: boolean;
@@ -36,7 +35,6 @@ export default function LeadTable({
   onDeleteLead,
   onViewNotes,
   onBookAppointment,
-  onEdit,
   onOpenLead,
   activeLeadId,
   isAddingRow,
@@ -473,10 +471,7 @@ export default function LeadTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
                       <DropdownMenuItem onClick={() => onOpenLead(lead)} className="text-xs cursor-pointer">
-                        <PanelRightOpen className="h-3.5 w-3.5 mr-2" /> Open lead
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onEdit(lead)} className="text-xs cursor-pointer">
-                        <Edit2 className="h-3.5 w-3.5 mr-2" /> Edit details
+                        <PanelRightOpen className="h-3.5 w-3.5 mr-2" /> Open and edit
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onBookAppointment(lead)} className="text-xs cursor-pointer">
                         <CalendarPlus className="h-3.5 w-3.5 mr-2" /> Book call

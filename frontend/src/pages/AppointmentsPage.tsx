@@ -48,7 +48,6 @@ export default function AppointmentsPage() {
 
   const loadAppointments = async () => {
     try {
-      setIsLoading(true);
       const data = await fetchAppointments();
       setAppointments(data);
     } catch {

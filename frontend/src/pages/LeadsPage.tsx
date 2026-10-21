@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { fetchNiches, fetchLeads, updateLead, deleteLead, createLead, createNiche, updateNiche, deleteNiche, createAppointment, batchDeleteLeads } from '@/lib/api';
 import NicheTabBar from '@/components/leads/NicheTabBar';
 import LeadTable from '@/components/leads/LeadTable';
-import LeadFormDialog from '@/components/leads/LeadFormDialog';
 import LeadDetailDialog from '@/components/leads/LeadDetailDialog';
 import MultiNotesDialog, { serializeNoteEntries } from '@/components/common/MultiNotesDialog';
 import BookAppointmentDialog from '@/components/leads/BookAppointmentDialog';
@@ -50,10 +49,10 @@ export default function LeadsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Dialog states for editing existing items
-  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState<any | null>(null);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
-  const [notesLead, setNotesLead] = useState<any | null>(null);
+  // Read from `leads` so the notes dialog always shows the latest notes.
+  const [notesLeadId, setNotesLeadId] = useState<string | null>(null);
+  const notesLead = notesLeadId ? leads.find((l) => l._id === notesLeadId) ?? null : null;
   const [isBookApptOpen, setIsBookApptOpen] = useState(false);
   const [bookApptLead, setBookApptLead] = useState<any | null>(null);
   const [isNicheFormOpen, setIsNicheFormOpen] = useState(false);
@@ -83,15 +82,32 @@ export default function LeadsPage() {
     } catch { toast.error('Failed to load niches'); }
   };
 
-  const loadLeads = async () => {
+  // Only the newest request may write state, so a slow reply never overwrites
+  // fresher data.
+  const leadsRequest = useRef(0);
+  const loadLeads = async ({ silent = false }: { silent?: boolean } = {}) => {
+    const requestId = ++leadsRequest.current;
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const params: Record<string, string> = {};
       if (activeNicheId && activeNicheId !== 'all') params.niche = activeNicheId;
       const data = await fetchLeads(Object.keys(params).length > 0 ? params : undefined);
-      setLeads(data);
-    } catch { toast.error('Failed to load leads'); }
-    finally { setIsLoading(false); }
+      if (requestId === leadsRequest.current) setLeads(data);
+    } catch { if (!silent) toast.error('Failed to load leads'); }
+    finally { if (requestId === leadsRequest.current) setIsLoading(false); }
+  };
+
+  /** Swap one lead in place with the server's copy, no refetch. */
+  const replaceLead = (saved: any) => {
+    if (!saved?._id) return;
+    setLeads((prev) => prev.map((l) => (l._id === saved._id ? { ...l, ...saved } : l)));
+  };
+
+  /** Belongs in the current list (niche filter)? */
+  const inCurrentNiche = (lead: any) => {
+    if (!activeNicheId || activeNicheId === 'all') return true;
+    const nicheId = typeof lead.niche === 'object' ? lead.niche?._id : lead.niche;
+    return nicheId === activeNicheId;
   };
 
   // Count leads per status tab (for the current niche)
@@ -117,14 +133,14 @@ export default function LeadsPage() {
         setIsNicheFormOpen(true);
         return;
       }
-      await createLead({ ...data, niche: assignedNiche });
+      const saved = await createLead({ ...data, niche: assignedNiche });
       toast.success('Lead added');
       setIsAddingLeadRow(false);
       // If added with another status, switch tab to that status so it is visible
       if (data.status && data.status !== activeStatus) {
         setActiveStatus(data.status);
       }
-      loadLeads();
+      if (saved?._id && inCurrentNiche(saved)) setLeads((prev) => [saved, ...prev]);
     } catch {
       toast.error('Failed to create lead');
     }
@@ -205,7 +221,7 @@ export default function LeadsPage() {
           localStorage.setItem('trackme_last_imported_leads', JSON.stringify(newlyCreatedIds));
         } catch {}
         toast.success(`${created} lead${created > 1 ? 's' : ''} imported successfully${skipped > 0 ? ` (${skipped} rows skipped — missing business name)` : ''}`);
-        loadLeads();
+        loadLeads({ silent: true });
       } else {
         toast.error(`No leads were imported. Make sure the file has a "Business Name" column.`);
       }
@@ -226,9 +242,10 @@ export default function LeadsPage() {
     try {
       await batchDeleteLeads(lastImportedLeadIds);
       toast.success(`Successfully undid last import (${count} leads removed)`);
+      const removed = new Set(lastImportedLeadIds);
+      setLeads((prev) => prev.filter((l) => !removed.has(l._id)));
       setLastImportedLeadIds([]);
       localStorage.removeItem('trackme_last_imported_leads');
-      loadLeads();
     } catch (err: any) {
       toast.error(err?.message || 'Failed to undo import');
     } finally {
@@ -306,33 +323,32 @@ export default function LeadsPage() {
 
 
   const handleUpdateLeadInline = async (id: string, updates: any) => {
+    const previous = leads.find((l) => l._id === id);
+    setLeads((prev) => prev.map((l) => (l._id === id ? { ...l, ...updates } : l)));
     try {
-      setLeads(leads.map(l => l._id === id ? { ...l, ...updates } : l));
-      await updateLead(id, updates);
-      toast.success('Updated');
-      loadLeads();
+      replaceLead(await updateLead(id, updates));
     } catch {
+      if (previous) replaceLead(previous);
       toast.error('Failed to update lead');
-      loadLeads();
     }
   };
 
   // Call-prep edits from the detail modal save quietly; the modal shows its own status.
-  const handleSaveCallPrep = async (id: string, changes: Record<string, string>) => {
-    await updateLead(id, changes);
-    setLeads((prev) => prev.map((l) => (l._id === id ? { ...l, ...changes } : l)));
+  const handleSaveFromModal = async (id: string, changes: Record<string, any>) => {
+    replaceLead(await updateLead(id, changes));
   };
 
   const openNotes = (lead: any) => {
-    setNotesLead(lead);
+    setNotesLeadId(lead._id);
     setIsNotesOpen(true);
   };
 
   const handleDeleteLead = async (id: string) => {
     try {
       await deleteLead(id);
+      setLeads((prev) => prev.filter((l) => l._id !== id));
+      if (detailLeadId === id) setDetailLeadId(null);
       toast.success('Lead deleted');
-      loadLeads();
     } catch { toast.error('Failed to delete lead'); }
   };
 
@@ -493,7 +509,6 @@ export default function LeadsPage() {
           onDeleteLead={handleDeleteLead}
           onViewNotes={openNotes}
           onBookAppointment={(lead) => { setBookApptLead(lead); setIsBookApptOpen(true); }}
-          onEdit={(lead) => { setEditingLead(lead); setIsLeadFormOpen(true); }}
           onOpenLead={(lead) => setDetailLeadId(lead._id)}
           activeLeadId={detailLeadId}
           isAddingRow={isAddingLeadRow}
@@ -506,33 +521,16 @@ export default function LeadsPage() {
         lead={detailLead}
         open={!!detailLead}
         onClose={() => setDetailLeadId(null)}
-        onSave={handleSaveCallPrep}
+        onSave={handleSaveFromModal}
         onOpenNotes={openNotes}
-        onEdit={(lead) => { setEditingLead(lead); setIsLeadFormOpen(true); }}
         onBookAppointment={(lead) => { setBookApptLead(lead); setIsBookApptOpen(true); }}
       />
 
-      {/* Dialogs for details / appointments */}
-      <LeadFormDialog
-        open={isLeadFormOpen}
-        onClose={() => setIsLeadFormOpen(false)}
-        onSubmit={async (data) => {
-          if (editingLead) {
-            await updateLead(editingLead._id, data);
-            toast.success('Lead updated');
-            setIsLeadFormOpen(false);
-            setEditingLead(null);
-            loadLeads();
-          }
-        }}
-        lead={editingLead}
-        nicheId={activeNicheId === 'all' ? undefined : activeNicheId || undefined}
-      />
       <MultiNotesDialog
         open={isNotesOpen}
         onClose={() => {
           setIsNotesOpen(false);
-          setNotesLead(null);
+          setNotesLeadId(null);
         }}
         title={`Notes for ${notesLead?.businessName || notesLead?.personName || 'Lead'}`}
         subtitle={notesLead?.createdAt ? `Lead created on ${new Date(notesLead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}` : undefined}
@@ -571,7 +569,6 @@ export default function LeadsPage() {
             toast.success('Appointment booked successfully');
             setIsBookApptOpen(false);
             setBookApptLead(null);
-            loadLeads();
           } catch {
             toast.error('Failed to book appointment');
           }

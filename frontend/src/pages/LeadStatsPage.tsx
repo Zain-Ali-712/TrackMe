@@ -63,6 +63,7 @@ export default function LeadStatsPage() {
     try {
       setIsLoading(true);
       setError(null);
+      // Data already on screen stays there (dimmed) until the new filter loads.
       const data = await fetchNicheStats(
         selectedNicheId === 'all' ? undefined : selectedNicheId,
         selectedMonth === 'all' ? undefined : selectedMonth
@@ -114,7 +115,7 @@ export default function LeadStatsPage() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className={cn('space-y-5 [&>*]:transition-opacity', isLoading && stats && '[&>*:not(:first-child)]:opacity-50')} aria-busy={isLoading}>
       {/* Filters */}
       <div className="surface p-3 sm:p-4 space-y-3">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 -mb-0.5">
@@ -157,7 +158,7 @@ export default function LeadStatsPage() {
             <RotateCw className="h-3.5 w-3.5 mr-1.5" /> Retry
           </Button>
         </div>
-      ) : isLoading || !stats ? (
+      ) : !stats ? (
         <div className="animate-pulse space-y-4" aria-busy="true" aria-label="Loading analytics">
           <div className="h-28 bg-slate-200/50 dark:bg-slate-900 rounded-2xl" />
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
@@ -235,7 +236,7 @@ export default function LeadStatsPage() {
                 <div>
                   <h3 className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Daily pipeline</h3>
                   <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    {nicheLabel}, {selectedMonth === 'all' ? 'last 30 days' : periodLabel}, by the day each lead was added
+                    {nicheLabel}, {selectedMonth === 'all' ? 'last 30 days' : periodLabel}, each counted on the day it happened
                   </p>
                 </div>
                 <ChartLegend

@@ -2,6 +2,19 @@ import Lead from '../models/Lead.js';
 import Appointment from '../models/Appointment.js';
 import Niche from '../models/Niche.js';
 
+/**
+ * Stamp the dates that mark a status change onto an update body.
+ * appointmentAt is kept once set (the call was booked even if the lead later
+ * closes); closedAt is cleared if the lead leaves Closed.
+ */
+function applyStatusDates(body, currentLead, nextStatus) {
+  const now = new Date();
+  body.statusChangedAt = now;
+  if (nextStatus === 'Appointment' && !currentLead?.appointmentAt) body.appointmentAt = now;
+  if (nextStatus === 'Closed') body.closedAt = now;
+  else if (currentLead?.closedAt) body.closedAt = null;
+}
+
 export const getLeads = async (req, res) => {
   try {
     const { niche, status, search } = req.query;
@@ -66,6 +79,8 @@ export const createLead = async (req, res) => {
       req.body.coldCalledAt = new Date();
     }
 
+    if (req.body.status) applyStatusDates(req.body, null, req.body.status);
+
     const newLead = new Lead(req.body);
     let savedLead = await newLead.save();
     savedLead = await savedLead.populate('niche', 'name icon color');
@@ -97,6 +112,10 @@ export const updateLead = async (req, res) => {
       // If user changed status without checking the box, auto check it!
       req.body.coldCalled = true;
       req.body.coldCalledAt = currentLead.coldCalledAt || new Date();
+    }
+
+    if (req.body.status && req.body.status !== currentLead.status) {
+      applyStatusDates(req.body, currentLead, req.body.status);
     }
 
     const updatedLead = await Lead.findByIdAndUpdate(
@@ -302,31 +321,27 @@ export const getNicheStats = async (req, res) => {
       labelFormat = 'shortDate';
     }
 
+    // Leads count on the day they were added; appointments and wins count on
+    // the day they happened. Leads from before those dates were recorded fall
+    // back to their last update, the closest record of when the status moved.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const dayKey = (date) => ({ $dateToString: { format: '%Y-%m-%d', date, timezone } });
+    const inRange = { $gte: trendStart, $lt: trendEnd };
+
+    const countByDay = (match, dateExpr) => Lead.aggregate([
+      { $match: { ...nicheFilter, ...match } },
+      { $project: { at: dateExpr } },
+      { $match: { at: inRange } },
+      { $group: { _id: dayKey('$at'), count: { $sum: 1 } } }
+    ]);
+
     const [leadTrend, appointmentTrend, closedTrend] = await Promise.all([
-      Lead.aggregate([
-        { $match: { ...nicheFilter, createdAt: { $gte: trendStart, $lt: trendEnd } } },
-        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
-      ]),
-      Lead.aggregate([
-        {
-          $match: {
-            ...nicheFilter,
-            status: 'Appointment',
-            createdAt: { $gte: trendStart, $lt: trendEnd }
-          }
-        },
-        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
-      ]),
-      Lead.aggregate([
-        {
-          $match: {
-            ...nicheFilter,
-            status: 'Closed',
-            createdAt: { $gte: trendStart, $lt: trendEnd }
-          }
-        },
-        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
-      ])
+      countByDay({}, '$createdAt'),
+      countByDay(
+        { $or: [{ appointmentAt: { $ne: null } }, { status: 'Appointment' }] },
+        { $ifNull: ['$appointmentAt', '$updatedAt'] }
+      ),
+      countByDay({ status: 'Closed' }, { $ifNull: ['$closedAt', '$updatedAt'] })
     ]);
 
     const toCountMap = (rows) => new Map(rows.map((row) => [row._id, row.count]));

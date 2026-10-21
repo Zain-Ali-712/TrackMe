@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Flame, CalendarDays, Target, Info, CircleDashed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -51,18 +51,28 @@ export default function HabitsPage() {
     loadMonthData(selectedYear, selectedMonth);
   }, [selectedYear, selectedMonth]);
 
+  // Only the newest request may write state; earlier ones (e.g. a month the
+  // user already left) are dropped. The skeleton shows only before first load.
+  const monthRequest = useRef(0);
+  const [isFetching, setIsFetching] = useState(false);
   const loadMonthData = async (year: number, month: number) => {
+    const requestId = ++monthRequest.current;
     try {
-      setIsLoading(true);
+      setIsFetching(true);
       const res = await fetchMonthHabitData(year, month);
-      setData(res);
+      if (requestId === monthRequest.current) setData(res);
     } catch (error) {
       console.error('Failed to load habit data', error);
-      toast.error('Failed to load habit tracker data');
+      if (requestId === monthRequest.current) toast.error('Failed to load habit tracker data');
     } finally {
-      setIsLoading(false);
+      if (requestId === monthRequest.current) {
+        setIsFetching(false);
+        setIsLoading(false);
+      }
     }
   };
+  // Switching months keeps the old month on screen, dimmed, until the new one arrives.
+  const isSwitchingMonth = isFetching && !!data && (data.year !== selectedYear || data.month !== selectedMonth);
 
   // Optimistic Toggle Checkbox
   const handleToggleHabit = async (
@@ -329,7 +339,7 @@ export default function HabitsPage() {
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className={cn('space-y-6 pb-12 [&>*]:transition-opacity', isSwitchingMonth && '[&>*:not(:first-child)]:opacity-50')} aria-busy={isFetching}>
       {/* Month & Year Selection Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 surface p-3.5">
         {/* Month Pills Tabs */}

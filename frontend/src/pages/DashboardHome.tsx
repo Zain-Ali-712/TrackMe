@@ -28,7 +28,6 @@ export default function DashboardHome() {
 
   const loadStats = async () => {
     try {
-      setIsLoading(true);
       const now = new Date();
       const [leadData, habitData] = await Promise.all([
         fetchLeadStats().catch(err => {
