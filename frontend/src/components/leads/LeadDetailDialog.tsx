@@ -220,126 +220,102 @@ export default function LeadDetailDialog({
           </header>
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            {/* Contact strip */}
-            <dl className="grid grid-cols-1 sm:grid-cols-3 border-b border-slate-200/80 dark:border-slate-800 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/80 dark:divide-slate-800">
+            {/* Contact details: how and when to reach them */}
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-200/70 dark:bg-slate-800 border-b border-slate-200/80 dark:border-slate-800">
               {contactItems.map((item) => {
                 const value: string = lead[item.key] || '';
                 return (
-                  <div key={item.key} className="flex items-start gap-3 px-5 sm:px-4 first:sm:pl-7 py-3 min-w-0">
-                    <span className="grid place-items-center h-8 w-8 shrink-0 mt-0.5 rounded-lg bg-clay-50 text-clay-700 dark:bg-clay-950/50 dark:text-clay-300">
-                      <item.icon className="h-[15px] w-[15px]" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <dt className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.label}</dt>
-                      <dd className="text-[13px] font-medium text-slate-900 dark:text-slate-100">
-                        <EditableField
-                          label={item.label}
-                          value={value}
-                          placeholder={`Add ${item.label.toLowerCase()}`}
-                          onSave={(v) => save({ [item.key]: v })}
-                          extraActions={
-                            value && item.copyable ? (
-                              <IconAction label={`Copy ${item.label.toLowerCase()}`} onClick={() => copy(value, item.label)}>
-                                <Copy className="h-3.5 w-3.5" />
-                              </IconAction>
-                            ) : null
-                          }
-                          renderValue={(v) => (
-                            <a
-                              href={item.href(v)}
-                              target={item.external ? '_blank' : undefined}
-                              rel={item.external ? 'noreferrer' : undefined}
-                              className="hover:text-clay-700 dark:hover:text-clay-300 hover:underline"
-                            >
-                              {item.format ? item.format(v) : v}
-                              {item.external && <ExternalLink className="inline h-3 w-3 ml-1 -mt-0.5 opacity-60" />}
-                            </a>
-                          )}
-                        />
-                      </dd>
-                    </div>
-                  </div>
+                  <ContactCell key={item.key} icon={item.icon} label={item.label}>
+                    <EditableField
+                      label={item.label}
+                      value={value}
+                      placeholder={`Add ${item.label.toLowerCase()}`}
+                      onSave={(v) => save({ [item.key]: v })}
+                      extraActions={
+                        value && item.copyable ? (
+                          <IconAction label={`Copy ${item.label.toLowerCase()}`} onClick={() => copy(value, item.label)}>
+                            <Copy className="h-3.5 w-3.5" />
+                          </IconAction>
+                        ) : null
+                      }
+                      renderValue={(v) => (
+                        <a
+                          href={item.href(v)}
+                          target={item.external ? '_blank' : undefined}
+                          rel={item.external ? 'noreferrer' : undefined}
+                          className="text-[13px] font-medium text-slate-900 dark:text-slate-100 hover:text-clay-700 dark:hover:text-clay-300 hover:underline"
+                        >
+                          {item.format ? item.format(v) : v}
+                          {item.external && <ExternalLink className="inline h-3 w-3 ml-1 -mt-0.5 opacity-60" />}
+                        </a>
+                      )}
+                    />
+                  </ContactCell>
                 );
               })}
+              <ContactCell icon={Clock} label="Best call time">
+                <EditableField
+                  label="Best call time"
+                  value={lead.bestCallTime || ''}
+                  placeholder="e.g. Tue–Thu, 10–11:30 AM"
+                  onSave={(v) => save({ bestCallTime: v })}
+                  renderValue={(v) => <span className="text-[13px] font-medium text-slate-900 dark:text-slate-100">{v}</span>}
+                />
+              </ContactCell>
             </dl>
 
             <div className="px-5 sm:px-7 py-5 space-y-6">
-              <div className="grid gap-5 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-                {/* Notes: description (first note) + latest note */}
-                <section aria-labelledby="lead-notes" className="min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <h3 id="lead-notes" className="text-[12px] font-semibold text-slate-600 dark:text-slate-300">Notes</h3>
+              {/* Notes: description (first note) beside the latest note */}
+              <section aria-labelledby="lead-notes">
+                <SectionHeading
+                  id="lead-notes"
+                  action={
                     <button
                       type="button"
                       onClick={() => onOpenNotes(lead)}
-                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-clay-700 dark:text-clay-300 hover:bg-clay-50 dark:hover:bg-clay-950/40"
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium text-clay-700 dark:text-clay-300 hover:bg-clay-50 dark:hover:bg-clay-950/40"
                     >
-                      <StickyNote className="h-3 w-3" />
+                      <StickyNote className="h-3.5 w-3.5" />
                       {notesCount > 0 ? `All notes (${notesCount})` : 'Add notes'}
                     </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-[10.5px] font-medium text-slate-400 dark:text-slate-500 mb-0.5">
-                        Description{firstNote ? `, ${shortDate(firstNote.createdAt)}` : ''}
-                      </p>
-                      <EditableField
-                        label="Description"
-                        multiline
-                        value={firstNote?.text || ''}
-                        placeholder="Add a description (saved as the first note)"
-                        onSave={(v) => saveNote(firstNote ? 0 : 'new', v)}
-                        renderValue={(v) => <span className="text-[12.5px] leading-relaxed text-slate-700 dark:text-slate-200">{v}</span>}
-                      />
-                    </div>
-
-                    {latestNote && (
-                      <div className="pt-3 border-t border-slate-200/70 dark:border-slate-800">
-                        <p className="text-[10.5px] font-medium text-slate-400 dark:text-slate-500 mb-0.5">
-                          Latest note, {shortDate(latestNote.createdAt)}
-                        </p>
-                        <EditableField
-                          label="Latest note"
-                          multiline
-                          value={latestNote.text}
-                          onSave={(v) => saveNote(notes.length - 1, v)}
-                          renderValue={(v) => <span className="text-[12.5px] leading-relaxed text-slate-700 dark:text-slate-200">{v}</span>}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                {/* Best call time + nearby examples */}
-                <section className="min-w-0 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200/70 dark:border-slate-800 p-4 space-y-3.5">
-                  <div>
-                    <FieldLabel icon={Clock}>Best call time</FieldLabel>
+                  }
+                >
+                  Notes
+                </SectionHeading>
+                <div className="grid grid-cols-1 md:grid-cols-2 rounded-xl border border-slate-200/80 dark:border-slate-800 divide-y md:divide-y-0 md:divide-x divide-slate-200/80 dark:divide-slate-800">
+                  <NoteColumn title="Description" date={firstNote?.createdAt}>
                     <EditableField
-                      label="Best call time"
-                      value={lead.bestCallTime || ''}
-                      placeholder="e.g. Tue–Thu, 10–11:30 AM"
-                      onSave={(v) => save({ bestCallTime: v })}
-                      renderValue={(v) => <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-50">{v}</span>}
-                    />
-                  </div>
-                  <div className="pt-3.5 border-t border-slate-200/80 dark:border-slate-700/70">
-                    <FieldLabel icon={Store}>Nearby examples</FieldLabel>
-                    <EditableField
-                      label="Nearby examples"
+                      label="Description"
                       multiline
-                      value={lead.nearbyExamples || ''}
-                      placeholder={lead.location ? `Up to 3 businesses near ${lead.location}, one per line` : 'Up to 3 nearby businesses, one per line'}
-                      onSave={(v) => save({ nearbyExamples: v })}
-                      renderValue={(v) => <span className="text-[12.5px] leading-relaxed text-slate-700 dark:text-slate-200">{v}</span>}
+                      value={firstNote?.text || ''}
+                      placeholder="Add a description (saved as the first note)"
+                      onSave={(v) => saveNote(firstNote ? 0 : 'new', v)}
                     />
-                  </div>
-                </section>
-              </div>
+                  </NoteColumn>
+                  <NoteColumn title="Latest note" date={latestNote?.createdAt}>
+                    {latestNote ? (
+                      <EditableField
+                        label="Latest note"
+                        multiline
+                        value={latestNote.text}
+                        onSave={(v) => saveNote(notes.length - 1, v)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onOpenNotes(lead)}
+                        className="text-left text-[12.5px] text-slate-400 dark:text-slate-500 hover:text-clay-700 dark:hover:text-clay-300"
+                      >
+                        No newer notes yet. Add one after your next call.
+                      </button>
+                    )}
+                  </NoteColumn>
+                </div>
+              </section>
 
-              {/* Call prep */}
-              <section aria-labelledby="call-prep" className="space-y-3">
-                <h3 id="call-prep" className="font-display text-lg font-medium text-slate-900 dark:text-slate-50">Call prep</h3>
+              {/* Call prep: what to say on the call */}
+              <section aria-labelledby="call-prep">
+                <SectionHeading id="call-prep">Call prep</SectionHeading>
                 <div className="grid gap-3 md:grid-cols-2">
                   <PrepBlock icon={CircleAlert} label="What's the problem">
                     <EditableField
@@ -359,16 +335,25 @@ export default function LeadDetailDialog({
                       onSave={(v) => save({ solution: v })}
                     />
                   </PrepBlock>
+                  <PrepBlock icon={Store} label="Nearby examples">
+                    <EditableField
+                      label="Nearby examples"
+                      multiline
+                      value={lead.nearbyExamples || ''}
+                      placeholder={lead.location ? `Up to 3 businesses near ${lead.location}, one per line` : 'Up to 3 nearby businesses, one per line'}
+                      onSave={(v) => save({ nearbyExamples: v })}
+                    />
+                  </PrepBlock>
+                  <PrepBlock icon={MessagesSquare} label="Cold call questions">
+                    <EditableField
+                      label="Cold call questions"
+                      multiline
+                      value={lead.coldCallQuestions || ''}
+                      placeholder="One question per line"
+                      onSave={(v) => save({ coldCallQuestions: v })}
+                    />
+                  </PrepBlock>
                 </div>
-                <PrepBlock icon={MessagesSquare} label="Cold call questions">
-                  <EditableField
-                    label="Cold call questions"
-                    multiline
-                    value={lead.coldCallQuestions || ''}
-                    placeholder="One question per line"
-                    onSave={(v) => save({ coldCallQuestions: v })}
-                  />
-                </PrepBlock>
               </section>
             </div>
           </div>
@@ -377,7 +362,7 @@ export default function LeadDetailDialog({
           <footer className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 px-5 sm:px-7 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900">
             <p className={cn('flex items-center gap-1.5 text-[11px] font-medium', savedAt ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500')} aria-live="polite">
               <CircleCheck className="h-3.5 w-3.5" />
-              {savedAt ? 'Saved' : 'Use the pencil next to any field to edit it'}
+              {savedAt ? 'Saved' : 'Hover a field and click the pencil to edit it'}
             </p>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => onOpenNotes(lead)} className="text-xs">
@@ -401,18 +386,54 @@ export default function LeadDetailDialog({
 
 /* ------------------------------------------------------------------ */
 
+function SectionHeading({ id, action, children }: { id: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 mb-2.5">
+      <h3 id={id} className="font-display text-lg font-medium text-slate-900 dark:text-slate-50">{children}</h3>
+      {action}
+    </div>
+  );
+}
+
 function FieldLabel({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <p className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+    <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
       <Icon className="h-3.5 w-3.5 text-clay-600 dark:text-clay-400" />
       {children}
     </p>
   );
 }
 
+/** One cell of the contact grid; hovering anywhere in it reveals its edit button. */
+function ContactCell({ icon: Icon, label, children }: { icon: React.ElementType; label: string; children: React.ReactNode }) {
+  return (
+    <div className="group/field flex items-start gap-3 bg-white dark:bg-slate-900 px-5 sm:px-7 py-3 min-w-0">
+      <span className="grid place-items-center h-8 w-8 shrink-0 mt-0.5 rounded-lg bg-clay-50 text-clay-700 dark:bg-clay-950/50 dark:text-clay-300">
+        <Icon className="h-[15px] w-[15px]" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <dt className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{label}</dt>
+        <dd>{children}</dd>
+      </div>
+    </div>
+  );
+}
+
+function NoteColumn({ title, date, children }: { title: string; date?: string; children: React.ReactNode }) {
+  return (
+    <div className="group/field min-w-0 p-3.5">
+      <p className="flex items-baseline justify-between gap-2 mb-1">
+        <span className="text-[11.5px] font-semibold text-slate-600 dark:text-slate-300">{title}</span>
+        {date && <span className="text-[10.5px] text-slate-400 dark:text-slate-500 tabular-nums">{shortDate(date)}</span>}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 function PrepBlock({ icon, label, children }: { icon: React.ElementType; label: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-800 px-3.5 py-3">
+    <div className="group/field min-w-0 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200/60 dark:border-slate-800 px-3.5 py-3 transition-colors hover:border-slate-300 dark:hover:border-slate-700">
       <FieldLabel icon={icon}>{label}</FieldLabel>
       {children}
     </div>
@@ -572,14 +593,14 @@ function EditableField({
       {Icon && <Icon className="h-3.5 w-3.5 shrink-0 mt-[3px]" />}
       <div className="min-w-0 flex-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
         {value ? (
-          renderValue ? renderValue(value) : <span className="text-[13px] leading-relaxed text-slate-700 dark:text-slate-200">{value}</span>
+          renderValue ? renderValue(value) : <span className="text-[12.5px] leading-relaxed text-slate-700 dark:text-slate-200">{value}</span>
         ) : (
           <button type="button" onClick={start} className="text-left text-[12.5px] font-normal text-slate-400 dark:text-slate-500 hover:text-clay-700 dark:hover:text-clay-300">
             {placeholder || `Add ${label.toLowerCase()}`}
           </button>
         )}
       </div>
-      <div className="flex shrink-0 items-center opacity-60 group-hover/field:opacity-100 focus-within:opacity-100 transition-opacity">
+      <div className="flex shrink-0 items-center opacity-0 group-hover/field:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
         {extraActions}
         <IconAction label={`Edit ${label.toLowerCase()}`} onClick={start}>
           <Pencil className="h-3.5 w-3.5" />
