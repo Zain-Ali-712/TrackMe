@@ -3,8 +3,10 @@ import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Dumbbell, Moon, ShieldCheck, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChartTheme, ChartTooltipCard } from '@/lib/chartTheme';
+import { calorieTargetFor } from '@/lib/habitScoring';
 
-const CALORIE_TARGET = 2400;
+// Current target (2550 from 2026-10-24); past days are judged by their own target.
+const CALORIE_TARGET = calorieTargetFor();
 const PROTEIN_TARGET = 80;
 
 export interface DayNutritionData {
@@ -58,7 +60,7 @@ export default function NutritionFitnessSection({
     ? Math.round(daysWithProtein.reduce((sum, d) => sum + (d.protein || 0), 0) / daysWithProtein.length) 
     : 0;
 
-  const calorieGoalDays = activeChartData.filter(d => (d.calories || 0) > 2400).length;
+  const calorieGoalDays = activeChartData.filter(d => d.isMetCalories).length;
   const proteinGoalDays = activeChartData.filter(d => (d.protein || 0) >= 80).length;
 
   const NutritionTooltip = ({ active, payload }: any) => {
@@ -75,7 +77,7 @@ export default function NutritionFitnessSection({
         ]}
         footer={
           <span className="flex flex-col gap-0.5">
-            <span>{cal > CALORIE_TARGET ? 'Calorie target met' : cal > 0 ? `${CALORIE_TARGET + 1 - cal} kcal under target` : `Calorie target above ${CALORIE_TARGET}`}</span>
+            <span>{item.isMetCalories ? 'Calorie target met' : cal > 0 ? `${calorieTargetFor(item.date) + 1 - cal} kcal under target` : `Calorie target above ${calorieTargetFor(item.date)}`}</span>
             <span>{prot >= PROTEIN_TARGET ? 'Protein target met' : prot > 0 ? `${PROTEIN_TARGET - prot} g under target` : `Protein target ${PROTEIN_TARGET} g`}</span>
           </span>
         }

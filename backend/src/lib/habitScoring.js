@@ -4,42 +4,69 @@
  * The frontend mirrors this file in `frontend/src/lib/habitScoring.ts` purely
  * for optimistic updates — the backend is the source of truth.
  *
- * Habits are matched to rules by KEYWORD, never by exact name. An earlier
- * version compared lowercased strings, which meant renaming a habit (e.g.
- * "Wake up early (4)" -> "Wake up 4Am") silently dropped its points and a
- * fully-completed day could only ever score 95%. Keyword matching makes that
- * class of bug impossible.
- *
- * Matching is per WORD, never a raw substring: matching "show" as a substring
- * would swallow "Morning shower" and cost the shower habit its points. A token
+ * Habits are matched to rules by KEYWORD, never by exact name, so renaming a
+ * habit can never silently drop its points. Matching is per WORD: a token
  * matches a keyword when it is the keyword itself or the keyword plus a common
- * English suffix (s / es / ing / ed), so "5 Prayers" matches "prayer" and
- * "No Disrespecting" matches "disrespect", while "shower" does not match "show".
+ * suffix (s / es / ing / ed), so "5 Prayers" matches "prayer" while "shower"
+ * does not match "show".
  *
- * Two rule shapes exist:
- *   `keywords`  - any ONE matching habit earns the full weight. This covers
- *                 leads/calls and professional growth, where Coldcall and Lead
- *                 generation each independently earn 15%.
- *   `slots`     - every slot must be covered to earn `weight`; covering one
- *                 earns `partial`. Used by Development (FYP alone = 15,
- *                 FYP + Project = 20).
+ * Scoring is VERSIONED BY DATE. Days before SCORING_V2_FROM keep the original
+ * rules exactly, so past scores and streaks never change. From that date on:
+ *   - Some habits record an intensity level (light / medium / dark) instead of
+ *     a plain tick, and the level decides how much of the weight they earn.
+ *   - Lead generation and Cold calls are filled in automatically from the day's
+ *     real counts.
+ *   - Every rule's points are rounded to a whole number (x.5 rounds up).
  *
- * A habit is assigned to exactly ONE rule (the first whose keywords it
- * contains), so keywords stay non-overlapping and nothing is double counted.
+ * Rule shapes:
+ *   keywords     - any matching habit feeds the rule.
+ *   allKeywords  - a habit feeds the rule only if it contains ALL the words
+ *                  ("Read before Sleep" must not count as book reading or sleep).
+ *   slots        - two related habits share one rule. One covered slot earns
+ *                  `single` (v2) / `partial` (legacy); both earn `weight`.
  *
- * Weights sum to exactly 100, so checking every habit scores exactly 100%.
+ * A habit is assigned to exactly ONE rule (the first it matches), so nothing is
+ * double counted. Each version's weights sum to exactly 100.
  */
 
 export const STREAK_THRESHOLD = 80;
 
-/** Split a habit name into comparable lowercase word tokens. */
-export const tokenizeHabitName = (name) =>
-  String(name || '')
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
+/** First day scored with the level-based rules ("YYYY-MM-DD"). */
+export const SCORING_V2_FROM = '2026-10-24';
 
-export const SCORING_RULES = [
+export const isV2Date = (dateStr) => !dateStr || String(dateStr) >= SCORING_V2_FROM;
+
+/** Intensity levels stored on a habit log. A log without a level counts as DARK (full). */
+export const LEVEL = { LIGHT: 1, MEDIUM: 2, DARK: 3 };
+
+/** Calorie surplus target for a day. */
+export const calorieTargetFor = (dateStr) => (isV2Date(dateStr) ? 2550 : 2400);
+
+/** Leads / calls per day needed for each level (v2 auto-fill). */
+export const AUTO_LEVEL_THRESHOLDS = {
+  leads: { medium: 6, dark: 12 }, // 1-5 light, 6-11 medium, 12+ dark
+  calls: { medium: 4, dark: 9 }   // 1-3 light, 4-8 medium, 9+ dark
+};
+
+export function levelFromCount(count, kind) {
+  const t = AUTO_LEVEL_THRESHOLDS[kind];
+  if (!t || !count || count <= 0) return 0;
+  if (count >= t.dark) return LEVEL.DARK;
+  if (count >= t.medium) return LEVEL.MEDIUM;
+  return LEVEL.LIGHT;
+}
+
+// Credit tables: share of the weight each level earns.
+const FULL_ONLY = { [LEVEL.DARK]: 1 };
+const LIGHT_DARK = { [LEVEL.LIGHT]: 0.5, [LEVEL.DARK]: 1 };
+const MEDIUM_DARK = { [LEVEL.MEDIUM]: 0.8, [LEVEL.DARK]: 1 };
+const LEADS_CALLS = { [LEVEL.LIGHT]: 0.5, [LEVEL.MEDIUM]: 1, [LEVEL.DARK]: 1 };
+const DEV_WORK = { [LEVEL.LIGHT]: 0.4, [LEVEL.MEDIUM]: 0.8, [LEVEL.DARK]: 1 };
+
+/** Original rules, used for every day before SCORING_V2_FROM. Binary ticks only. */
+export const LEGACY_RULES = [
+  // Did not exist before v2; listed first (weight 0) so it never borrows another rule's points.
+  { id: 'read_before_sleep',   weight: 0,  allKeywords: ['read', 'sleep'] },
   { id: 'five_prayers',        weight: 5,  keywords: ['prayer'] },
   { id: 'namaz_dua',           weight: 3,  keywords: ['namaz', 'dua', 'salah', 'pray'] },
   { id: 'no_doom_scroll',      weight: 2,  keywords: ['doom', 'scroll'] },
@@ -53,7 +80,7 @@ export const SCORING_RULES = [
   { id: 'book_reading',        weight: 5,  keywords: ['book', 'read'] },
   { id: 'learning_videos',     weight: 3,  keywords: ['learning', 'video', 'course', 'tutorial'] },
   { id: 'journaling',          weight: 3,  keywords: ['journal'] },
-  { id: 'writing_dreams',      weight: 3,  keywords: ['dream'] },
+  { id: 'writing_goals',       weight: 3,  keywords: ['dream', 'goal'] },
   { id: 'calories_surplus',    weight: 5,  keywords: ['calorie'] },
   { id: 'protein_amount',      weight: 3,  keywords: ['protein'] },
   { id: 'leads_calls',         weight: 15, keywords: ['coldcall', 'coldcalling', 'call', 'lead'] },
@@ -61,79 +88,158 @@ export const SCORING_RULES = [
   { id: 'development',         weight: 20, partial: 15, slots: [['fyp'], ['project']] }
 ];
 
-/** Max possible score — guards against the rules and the 100% goal drifting apart. */
-export const MAX_DAILY_SCORE = SCORING_RULES.reduce((total, rule) => total + rule.weight, 0);
+/** Level-based rules, used from SCORING_V2_FROM onward. */
+export const V2_RULES = [
+  { id: 'read_before_sleep',   weight: 2,  allKeywords: ['read', 'sleep'] },
+  { id: 'five_prayers',        weight: 5,  keywords: ['prayer'] },
+  { id: 'namaz_dua',           weight: 3,  keywords: ['namaz', 'dua', 'salah', 'pray'], credit: LIGHT_DARK },
+  { id: 'no_doom_scroll',      weight: 2,  keywords: ['doom', 'scroll'] },
+  { id: 'no_disrespecting',    weight: 3,  keywords: ['disrespect'] },
+  { id: 'no_movie_show',       weight: 2,  keywords: ['movie', 'show', 'series', 'netflix'] },
+  { id: 'sleep_on_time',       weight: 3,  keywords: ['sleep', 'bedtime'] },
+  { id: 'wake_up',             weight: 3,  keywords: ['wake'] },
+  { id: 'workout',             weight: 10, keywords: ['workout', 'gym', 'training', 'exercise'] },
+  { id: 'morning_shower',      weight: 2,  keywords: ['shower'], credit: LIGHT_DARK },
+  { id: 'brush_teeth',         weight: 2,  keywords: ['brush', 'teeth', 'tooth'] },
+  { id: 'book_reading',        weight: 5,  keywords: ['book', 'read'] },
+  { id: 'learning_videos',     weight: 3,  keywords: ['learning', 'video', 'course', 'tutorial'] },
+  { id: 'journaling',          weight: 3,  keywords: ['journal'] },
+  { id: 'writing_goals',       weight: 3,  keywords: ['dream', 'goal'] },
+  { id: 'calories_surplus',    weight: 5,  keywords: ['calorie'] },
+  { id: 'protein_amount',      weight: 3,  keywords: ['protein'] },
+  // One of the two = 10, both = 15; filled in automatically from the day's counts.
+  { id: 'leads_calls',         weight: 15, single: 10, slots: [['coldcall', 'coldcalling', 'call'], ['lead']], credit: LEADS_CALLS, auto: true },
+  { id: 'linkedin',            weight: 7,  keywords: ['linkedin'], credit: LIGHT_DARK },
+  { id: 'job_scholarship',     weight: 3,  keywords: ['job', 'scholarship'], credit: MEDIUM_DARK },
+  // One of the two = 12, both = 16.
+  { id: 'development',         weight: 16, single: 12, slots: [['fyp'], ['project']], credit: DEV_WORK }
+];
+
+/** Current rules, for scripts and tooling. */
+export const SCORING_RULES = V2_RULES;
+
+export const rulesFor = (dateStr) => (isV2Date(dateStr) ? V2_RULES : LEGACY_RULES);
+
+/** Max possible score (100) — guards against the rules and the goal drifting apart. */
+export const MAX_DAILY_SCORE = V2_RULES.reduce((total, rule) => total + rule.weight, 0);
+
+/** Split a habit name into comparable lowercase word tokens. */
+export const tokenizeHabitName = (name) =>
+  String(name || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 
 const SUFFIXES = ['s', 'es', 'ing', 'ed'];
 
-/** True when a name word is the keyword, or the keyword plus a plural/verb suffix. */
 const tokenMatchesKeyword = (token, keyword) =>
   token === keyword || SUFFIXES.some((suffix) => token === keyword + suffix);
 
 const matchesKeywords = (tokens, keywords) =>
   tokens.some((token) => keywords.some((keyword) => tokenMatchesKeyword(token, keyword)));
 
-const keywordsFor = (rule) => rule.keywords || rule.slots.flat();
+const ruleMatches = (tokens, rule) => {
+  if (rule.allKeywords) return rule.allKeywords.every((k) => matchesKeywords(tokens, [k]));
+  return matchesKeywords(tokens, rule.keywords || rule.slots.flat());
+};
+
+/** The rule a habit feeds on a given day (or undefined). */
+export function ruleForHabit(name, dateStr) {
+  const tokens = tokenizeHabitName(name);
+  if (tokens.length === 0) return undefined;
+  return rulesFor(dateStr).find((rule) => ruleMatches(tokens, rule));
+}
+
+/** Levels a habit can be marked with on a given day; [DARK] means a plain tick. */
+export function levelOptionsFor(name, dateStr) {
+  const rule = ruleForHabit(name, dateStr);
+  if (!rule || !isV2Date(dateStr) || !rule.credit) return [LEVEL.DARK];
+  return Object.keys(rule.credit).map(Number).sort();
+}
+
+/** True for habits the app fills in by itself on a given day (leads, cold calls). */
+export const isAutoHabit = (name, dateStr) => Boolean(isV2Date(dateStr) && ruleForHabit(name, dateStr)?.auto);
+
+/** Which auto counter feeds a habit: 'leads', 'calls' or null. */
+export function autoKindFor(name) {
+  const tokens = tokenizeHabitName(name);
+  if (matchesKeywords(tokens, ['lead'])) return 'leads';
+  if (matchesKeywords(tokens, ['coldcall', 'coldcalling', 'call'])) return 'calls';
+  return null;
+}
 
 /**
  * Assign each habit name to the first rule it matches.
- * @param {string[]} habitNames raw habit names from the database
  * @returns {{ assignments: Map<string, string[]>, unmatched: string[] }}
- *   assignments maps ruleId -> names of the habits feeding that rule.
  */
-export function assignHabitsToRules(habitNames) {
+export function assignHabitsToRules(habitNames, dateStr) {
   const assignments = new Map();
   const unmatched = [];
-
   for (const name of habitNames) {
-    const tokens = tokenizeHabitName(name);
-    if (tokens.length === 0) continue;
-
-    const rule = SCORING_RULES.find((candidate) =>
-      matchesKeywords(tokens, keywordsFor(candidate))
-    );
-
+    const rule = ruleForHabit(name, dateStr);
     if (!rule) {
-      unmatched.push(name);
+      if (tokenizeHabitName(name).length) unmatched.push(name);
       continue;
     }
-
     if (!assignments.has(rule.id)) assignments.set(rule.id, []);
     assignments.get(rule.id).push(name);
   }
-
   return { assignments, unmatched };
 }
+
+/** Round to a whole percent, x.5 up (guarding float noise like 2.4999999). */
+const roundPoints = (value) => Math.round(value + 1e-9);
 
 /**
  * Score one day.
  *
- * @param {string[]} checkedHabitNames names of the habits checked that day
+ * @param {Array<string|{name: string, level?: number}>} checked habits checked that day
+ *   (a plain name, or a log without a level, counts as DARK)
+ * @param {string} [dateStr] "YYYY-MM-DD"; picks legacy vs level-based rules
  * @returns {number} 0-100
  */
-export function calculateDailyHabitScore(checkedHabitNames) {
-  const { assignments } = assignHabitsToRules(checkedHabitNames || []);
+export function calculateDailyHabitScore(checked, dateStr) {
+  const v2 = isV2Date(dateStr);
+  const rules = rulesFor(dateStr);
+  const entries = (checked || []).map((item) =>
+    typeof item === 'string' ? { name: item, level: LEVEL.DARK } : { name: item.name, level: item.level || LEVEL.DARK }
+  );
+
+  // Strongest credit per rule (and per slot), from the habits checked today.
+  const creditOf = (rule, level) => (v2 && rule.credit ? rule.credit[level] ?? 0 : 1);
+  const byRule = new Map();
+  for (const entry of entries) {
+    const rule = ruleForHabit(entry.name, dateStr);
+    if (!rule) continue;
+    if (!byRule.has(rule.id)) byRule.set(rule.id, []);
+    byRule.get(rule.id).push(entry);
+  }
 
   let score = 0;
-
-  for (const rule of SCORING_RULES) {
-    const assigned = assignments.get(rule.id);
-    if (!assigned || assigned.length === 0) continue;
+  for (const rule of rules) {
+    const assigned = byRule.get(rule.id);
+    if (!assigned || assigned.length === 0 || rule.weight === 0) continue;
 
     if (rule.slots) {
-      // Slot rule: full weight only when every slot is covered.
-      const coveredSlots = rule.slots.filter((keywords) =>
-        assigned.some((name) => matchesKeywords(tokenizeHabitName(name), keywords))
-      ).length;
+      const slotCredits = rule.slots.map((keywords) =>
+        assigned
+          .filter((e) => matchesKeywords(tokenizeHabitName(e.name), keywords))
+          .reduce((best, e) => Math.max(best, creditOf(rule, e.level)), 0)
+      );
+      const covered = slotCredits.filter((c) => c > 0);
 
-      if (coveredSlots === rule.slots.length) {
-        score += rule.weight;
-      } else if (rule.partial !== undefined && coveredSlots >= 1) {
-        score += rule.partial;
+      if (!v2) {
+        if (covered.length === rule.slots.length) score += rule.weight;
+        else if (rule.partial !== undefined && covered.length >= 1) score += rule.partial;
+      } else if (covered.length === rule.slots.length) {
+        const average = covered.reduce((a, b) => a + b, 0) / covered.length;
+        score += roundPoints(rule.weight * average);
+      } else if (covered.length === 1) {
+        score += roundPoints(rule.single * covered[0]);
       }
     } else {
-      // Any-one rule: a single matching habit earns the full weight.
-      score += rule.weight;
+      const best = assigned.reduce((b, e) => Math.max(b, creditOf(rule, e.level)), 0);
+      score += v2 ? roundPoints(rule.weight * best) : rule.weight;
     }
   }
 

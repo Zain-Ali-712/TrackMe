@@ -1,12 +1,13 @@
 /**
  * Client-side mirror of `backend/src/lib/habitScoring.js`.
  *
- * Used ONLY to repaint the score immediately after a checkbox is clicked,
- * without a round trip. The backend response remains the source of truth, so
- * keep this file in step with the backend rules.
+ * Used ONLY to repaint the score immediately after a cell is clicked, without
+ * a round trip. The backend response remains the source of truth, so keep this
+ * file in step with the backend rules.
  *
- * Habits match by KEYWORD rather than exact name, so renaming a habit can
- * never silently drop its points (which is what capped a perfect day at 95%).
+ * Scoring is versioned by date: days before SCORING_V2_FROM keep the original
+ * binary rules (so past scores and streaks never change); from that date some
+ * habits record a light / medium / dark level and earn part of their weight.
  */
 
 export interface MajorHabitSummary {
@@ -24,15 +25,52 @@ export const STREAK_THRESHOLD = 80;
 /** A day at or above this score extends the streak. */
 export const STREAK_GOAL = STREAK_THRESHOLD;
 
+/** First day scored with the level-based rules. */
+export const SCORING_V2_FROM = '2026-10-24';
+export const isV2Date = (dateStr?: string) => !dateStr || dateStr >= SCORING_V2_FROM;
+
+export const LEVEL = { LIGHT: 1, MEDIUM: 2, DARK: 3 } as const;
+export type Level = 1 | 2 | 3;
+/** logsMap values: the level of that day's mark (truthy when marked). */
+export type LogsMap = Record<string, Record<number, number | boolean>>;
+
+export const LEVEL_LABELS: Record<number, string> = { 1: 'Light', 2: 'Medium', 3: 'Dark' };
+
+export const calorieTargetFor = (dateStr?: string) => (isV2Date(dateStr) ? 2550 : 2400);
+
+export const AUTO_LEVEL_THRESHOLDS = {
+  leads: { medium: 6, dark: 12 },
+  calls: { medium: 4, dark: 9 },
+} as const;
+
+export function levelFromCount(count: number, kind: 'leads' | 'calls'): number {
+  const t = AUTO_LEVEL_THRESHOLDS[kind];
+  if (!count || count <= 0) return 0;
+  if (count >= t.dark) return LEVEL.DARK;
+  if (count >= t.medium) return LEVEL.MEDIUM;
+  return LEVEL.LIGHT;
+}
+
+type Credit = Partial<Record<number, number>>;
+const LIGHT_DARK: Credit = { 1: 0.5, 3: 1 };
+const MEDIUM_DARK: Credit = { 2: 0.8, 3: 1 };
+const LEADS_CALLS: Credit = { 1: 0.5, 2: 1, 3: 1 };
+const DEV_WORK: Credit = { 1: 0.4, 2: 0.8, 3: 1 };
+
 export interface ScoringRule {
   id: string;
   weight: number;
   partial?: number;
+  single?: number;
   keywords?: string[];
+  allKeywords?: string[];
   slots?: string[][];
+  credit?: Credit;
+  auto?: boolean;
 }
 
-export const SCORING_RULES: ScoringRule[] = [
+export const LEGACY_RULES: ScoringRule[] = [
+  { id: 'read_before_sleep', weight: 0, allKeywords: ['read', 'sleep'] },
   { id: 'five_prayers', weight: 5, keywords: ['prayer'] },
   { id: 'namaz_dua', weight: 3, keywords: ['namaz', 'dua', 'salah', 'pray'] },
   { id: 'no_doom_scroll', weight: 2, keywords: ['doom', 'scroll'] },
@@ -46,15 +84,43 @@ export const SCORING_RULES: ScoringRule[] = [
   { id: 'book_reading', weight: 5, keywords: ['book', 'read'] },
   { id: 'learning_videos', weight: 3, keywords: ['learning', 'video', 'course', 'tutorial'] },
   { id: 'journaling', weight: 3, keywords: ['journal'] },
-  { id: 'writing_dreams', weight: 3, keywords: ['dream'] },
+  { id: 'writing_goals', weight: 3, keywords: ['dream', 'goal'] },
   { id: 'calories_surplus', weight: 5, keywords: ['calorie'] },
   { id: 'protein_amount', weight: 3, keywords: ['protein'] },
   { id: 'leads_calls', weight: 15, keywords: ['coldcall', 'coldcalling', 'call', 'lead'] },
   { id: 'professional_growth', weight: 8, keywords: ['job', 'linkedin', 'scholarship'] },
-  { id: 'development', weight: 20, partial: 15, slots: [['fyp'], ['project']] }
+  { id: 'development', weight: 20, partial: 15, slots: [['fyp'], ['project']] },
 ];
 
-export const MAX_DAILY_SCORE = SCORING_RULES.reduce((total, rule) => total + rule.weight, 0);
+export const V2_RULES: ScoringRule[] = [
+  { id: 'read_before_sleep', weight: 2, allKeywords: ['read', 'sleep'] },
+  { id: 'five_prayers', weight: 5, keywords: ['prayer'] },
+  { id: 'namaz_dua', weight: 3, keywords: ['namaz', 'dua', 'salah', 'pray'], credit: LIGHT_DARK },
+  { id: 'no_doom_scroll', weight: 2, keywords: ['doom', 'scroll'] },
+  { id: 'no_disrespecting', weight: 3, keywords: ['disrespect'] },
+  { id: 'no_movie_show', weight: 2, keywords: ['movie', 'show', 'series', 'netflix'] },
+  { id: 'sleep_on_time', weight: 3, keywords: ['sleep', 'bedtime'] },
+  { id: 'wake_up', weight: 3, keywords: ['wake'] },
+  { id: 'workout', weight: 10, keywords: ['workout', 'gym', 'training', 'exercise'] },
+  { id: 'morning_shower', weight: 2, keywords: ['shower'], credit: LIGHT_DARK },
+  { id: 'brush_teeth', weight: 2, keywords: ['brush', 'teeth', 'tooth'] },
+  { id: 'book_reading', weight: 5, keywords: ['book', 'read'] },
+  { id: 'learning_videos', weight: 3, keywords: ['learning', 'video', 'course', 'tutorial'] },
+  { id: 'journaling', weight: 3, keywords: ['journal'] },
+  { id: 'writing_goals', weight: 3, keywords: ['dream', 'goal'] },
+  { id: 'calories_surplus', weight: 5, keywords: ['calorie'] },
+  { id: 'protein_amount', weight: 3, keywords: ['protein'] },
+  { id: 'leads_calls', weight: 15, single: 10, slots: [['coldcall', 'coldcalling', 'call'], ['lead']], credit: LEADS_CALLS, auto: true },
+  { id: 'linkedin', weight: 7, keywords: ['linkedin'], credit: LIGHT_DARK },
+  { id: 'job_scholarship', weight: 3, keywords: ['job', 'scholarship'], credit: MEDIUM_DARK },
+  { id: 'development', weight: 16, single: 12, slots: [['fyp'], ['project']], credit: DEV_WORK },
+];
+
+/** Current rules. */
+export const SCORING_RULES = V2_RULES;
+export const rulesFor = (dateStr?: string) => (isV2Date(dateStr) ? V2_RULES : LEGACY_RULES);
+
+export const MAX_DAILY_SCORE = V2_RULES.reduce((total, rule) => total + rule.weight, 0);
 
 const SUFFIXES = ['s', 'es', 'ing', 'ed'];
 
@@ -65,110 +131,143 @@ export const tokenizeHabitName = (name: string): string[] =>
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
 
-/** A word matches a keyword when it is the keyword, or the keyword plus a common suffix. */
 const tokenMatchesKeyword = (token: string, keyword: string): boolean =>
   token === keyword || SUFFIXES.some((suffix) => token === `${keyword}${suffix}`);
 
 const matchesKeywords = (tokens: string[], keywords: string[]): boolean =>
   tokens.some((token) => keywords.some((keyword) => tokenMatchesKeyword(token, keyword)));
 
-const keywordsFor = (rule: ScoringRule): string[] => rule.keywords || (rule.slots || []).flat();
+const ruleMatches = (tokens: string[], rule: ScoringRule) =>
+  rule.allKeywords
+    ? rule.allKeywords.every((k) => matchesKeywords(tokens, [k]))
+    : matchesKeywords(tokens, rule.keywords || (rule.slots || []).flat());
+
+export function ruleForHabit(name: string, dateStr?: string): ScoringRule | undefined {
+  const tokens = tokenizeHabitName(name);
+  if (tokens.length === 0) return undefined;
+  return rulesFor(dateStr).find((rule) => ruleMatches(tokens, rule));
+}
+
+/** Levels a habit can be marked with on a day; [3] means a plain tick. */
+export function levelOptionsFor(name: string, dateStr?: string): number[] {
+  const rule = ruleForHabit(name, dateStr);
+  if (!rule || !isV2Date(dateStr) || !rule.credit) return [LEVEL.DARK];
+  return Object.keys(rule.credit).map(Number).sort();
+}
+
+export const isAutoHabit = (name: string, dateStr?: string) => Boolean(isV2Date(dateStr) && ruleForHabit(name, dateStr)?.auto);
+
+export function autoKindFor(name: string): 'leads' | 'calls' | null {
+  const tokens = tokenizeHabitName(name);
+  if (matchesKeywords(tokens, ['lead'])) return 'leads';
+  if (matchesKeywords(tokens, ['coldcall', 'coldcalling', 'call'])) return 'calls';
+  return null;
+}
 
 /** Map ruleId -> names of the habits feeding that rule. */
-export function assignHabitsToRules(habitNames: string[]) {
+export function assignHabitsToRules(habitNames: string[], dateStr?: string) {
   const assignments = new Map<string, string[]>();
   const unmatched: string[] = [];
-
   for (const name of habitNames) {
-    const tokens = tokenizeHabitName(name);
-    if (tokens.length === 0) continue;
-
-    const rule = SCORING_RULES.find((candidate) =>
-      matchesKeywords(tokens, keywordsFor(candidate))
-    );
-
+    const rule = ruleForHabit(name, dateStr);
     if (!rule) {
-      unmatched.push(name);
+      if (tokenizeHabitName(name).length) unmatched.push(name);
       continue;
     }
-
     if (!assignments.has(rule.id)) assignments.set(rule.id, []);
     assignments.get(rule.id)!.push(name);
   }
-
   return { assignments, unmatched };
 }
 
-/** Score one day from the names of the habits checked that day. */
-export function calculateDailyHabitScore(checkedHabitNames: string[]): number {
-  const { assignments } = assignHabitsToRules(checkedHabitNames || []);
+const roundPoints = (value: number) => Math.round(value + 1e-9);
+
+/** Score one day. A plain name (or a mark without a level) counts as dark. */
+export function calculateDailyHabitScore(
+  checked: Array<string | { name: string; level?: number }>,
+  dateStr?: string
+): number {
+  const v2 = isV2Date(dateStr);
+  const rules = rulesFor(dateStr);
+  const entries = (checked || []).map((item) =>
+    typeof item === 'string' ? { name: item, level: LEVEL.DARK as number } : { name: item.name, level: item.level || LEVEL.DARK }
+  );
+  const creditOf = (rule: ScoringRule, level: number) => (v2 && rule.credit ? rule.credit[level] ?? 0 : 1);
+
+  const byRule = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const rule = ruleForHabit(entry.name, dateStr);
+    if (!rule) continue;
+    if (!byRule.has(rule.id)) byRule.set(rule.id, []);
+    byRule.get(rule.id)!.push(entry);
+  }
 
   let score = 0;
-
-  for (const rule of SCORING_RULES) {
-    const assigned = assignments.get(rule.id);
-    if (!assigned || assigned.length === 0) continue;
+  for (const rule of rules) {
+    const assigned = byRule.get(rule.id);
+    if (!assigned || assigned.length === 0 || rule.weight === 0) continue;
 
     if (rule.slots) {
-      const coveredSlots = rule.slots.filter((keywords) =>
-        assigned.some((name) => matchesKeywords(tokenizeHabitName(name), keywords))
-      ).length;
-
-      if (coveredSlots === rule.slots.length) {
-        score += rule.weight;
-      } else if (rule.partial !== undefined && coveredSlots >= 1) {
-        score += rule.partial;
+      const slotCredits = rule.slots.map((keywords) =>
+        assigned
+          .filter((e) => matchesKeywords(tokenizeHabitName(e.name), keywords))
+          .reduce((best, e) => Math.max(best, creditOf(rule, e.level)), 0)
+      );
+      const covered = slotCredits.filter((c) => c > 0);
+      if (!v2) {
+        if (covered.length === rule.slots.length) score += rule.weight;
+        else if (rule.partial !== undefined && covered.length >= 1) score += rule.partial;
+      } else if (covered.length === rule.slots.length) {
+        score += roundPoints(rule.weight * (covered.reduce((a, b) => a + b, 0) / covered.length));
+      } else if (covered.length === 1) {
+        score += roundPoints((rule.single ?? rule.weight) * covered[0]);
       }
     } else {
-      score += rule.weight;
+      const best = assigned.reduce((b, e) => Math.max(b, creditOf(rule, e.level)), 0);
+      score += v2 ? roundPoints(rule.weight * best) : rule.weight;
     }
   }
 
   return Math.min(MAX_DAILY_SCORE, score);
 }
 
-/** Get the weight percentage for a specific habit */
-export function getHabitWeight(habitName: string): number {
-  const tokens = tokenizeHabitName(habitName);
-  const rule = SCORING_RULES.find((candidate) =>
-    matchesKeywords(tokens, keywordsFor(candidate))
-  );
-  return rule ? rule.weight : 0;
+/** Points a habit is worth on its own on a day (shared rules show the one-habit value). */
+export function getHabitWeight(habitName: string, dateStr?: string): number {
+  const rule = ruleForHabit(habitName, dateStr);
+  if (!rule) return 0;
+  if (isV2Date(dateStr) && rule.slots && rule.single !== undefined) return rule.single;
+  return rule.weight;
+}
+
+/** Points a single habit earns at a level, rounded like the daily score. */
+export function pointsForLevel(habitName: string, level: number, dateStr?: string): number {
+  const rule = ruleForHabit(habitName, dateStr);
+  if (!rule) return 0;
+  const base = getHabitWeight(habitName, dateStr);
+  const credit = isV2Date(dateStr) && rule.credit ? rule.credit[level] ?? 0 : 1;
+  return roundPoints(base * credit);
 }
 
 /**
- * For grouped / non-individual habits (Coldcall & Leads, LinkedIn & Job/Scholarships):
- * If habit A is not checked on day D, but its partner B is checked on day D,
- * then habit A is in a "partner-fulfilled" state (shown greyed-out with a subtle check).
+ * Before the v2 date, Coldcall & Leads (and LinkedIn & Job/Scholarships) shared
+ * one any-one rule: when habit A is unchecked but its partner B is checked,
+ * A is shown greyed with a subtle check. From v2 they score separately.
  */
 export function isPartnerFulfilledHabit(
   habitName: string,
   day: number,
-  logsMap: Record<string, Record<number, boolean>>,
-  habits: any[]
+  logsMap: LogsMap,
+  habits: any[],
+  dateStr?: string
 ): boolean {
+  if (isV2Date(dateStr)) return false;
   const tokens = tokenizeHabitName(habitName);
-
-  // Group 1: Leads & Calls (Coldcall / Practice + Lead generation)
-  const isLeadsGroup = matchesKeywords(tokens, ['coldcall', 'call', 'lead']);
-  if (isLeadsGroup) {
-    const partners = habits.filter((h) => {
-      const hTokens = tokenizeHabitName(h.name);
-      return h.name !== habitName && matchesKeywords(hTokens, ['coldcall', 'call', 'lead']);
-    });
+  const groups = [['coldcall', 'call', 'lead'], ['job', 'linkedin', 'scholarship']];
+  for (const group of groups) {
+    if (!matchesKeywords(tokens, group)) continue;
+    const partners = habits.filter((h) => h.name !== habitName && matchesKeywords(tokenizeHabitName(h.name), group));
     return partners.some((p) => Boolean(logsMap[p._id.toString()]?.[day]));
   }
-
-  // Group 2: Professional Growth (LinkedIn Setup + Job / Scholarships)
-  const isCareerGroup = matchesKeywords(tokens, ['job', 'linkedin', 'scholarship']);
-  if (isCareerGroup) {
-    const partners = habits.filter((h) => {
-      const hTokens = tokenizeHabitName(h.name);
-      return h.name !== habitName && matchesKeywords(hTokens, ['job', 'linkedin', 'scholarship']);
-    });
-    return partners.some((p) => Boolean(logsMap[p._id.toString()]?.[day]));
-  }
-
   return false;
 }
 
@@ -224,7 +323,7 @@ export function computeWeeklyWorstDayExemptions(
 /** Score every day of a month from the logs map returned by the API. */
 export function computeAllDailyScores(
   habits: any[],
-  logsMap: Record<string, Record<number, boolean>>,
+  logsMap: LogsMap,
   daysInMonth: number,
   year: number,
   month: number
@@ -232,30 +331,24 @@ export function computeAllDailyScores(
   const weekdaysShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   const draftResults = [];
 
-  const nameByHabitId: Record<string, string> = {};
-  habits.forEach((habit) => {
-    nameByHabitId[habit._id.toString()] = habit.name;
-  });
-
   for (let day = 1; day <= daysInMonth; day++) {
     const dayDate = new Date(year, month - 1, day);
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    const checkedNames: string[] = [];
+    const checked: Array<{ name: string; level: number }> = [];
     habits.forEach((habit) => {
-      const habitId = habit._id.toString();
-      if (logsMap[habitId] && logsMap[habitId][day]) {
-        checkedNames.push(nameByHabitId[habitId]);
-      }
+      const value = logsMap[habit._id.toString()]?.[day];
+      if (value) checked.push({ name: habit.name, level: typeof value === 'number' ? value : LEVEL.DARK });
     });
 
-    const score = calculateDailyHabitScore(checkedNames);
+    const score = calculateDailyHabitScore(checked, dateStr);
     draftResults.push({
       day,
-      date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      date: dateStr,
       weekday: weekdaysShort[dayDate.getDay()],
       isSunday: dayDate.getDay() === 0,
       score,
-      completedCount: checkedNames.length,
+      completedCount: checked.length,
       isBelowGoal: score < STREAK_THRESHOLD
     });
   }
@@ -335,7 +428,7 @@ export function computeStreakCount(
 
 export const MAJOR_HABIT_CONFIGS = [
   { key: 'book_reading', title: 'Book Reading', habits: ['book'], subtitle: 'Daily Reading' },
-  { key: 'journaling', title: 'Journaling', habits: ['journal', 'dream'], subtitle: 'Journaling & Dreams' },
+  { key: 'journaling', title: 'Journaling', habits: ['journal', 'dream', 'goal'], subtitle: 'Journaling & Goals' },
   { key: 'development', title: 'Development', habits: ['fyp', 'project'], subtitle: 'FYP & Project Dev' },
   { key: 'leads_calls', title: 'Leads / Calls', habits: ['coldcall', 'lead'], subtitle: 'Cold Call & Leads' },
   { key: 'workout', title: 'Workout', habits: ['workout'], subtitle: 'Training & Rest' },
@@ -346,7 +439,7 @@ export const MAJOR_HABIT_CONFIGS = [
 
 export function computeMajorHabitsStats(
   habits: any[],
-  logsMap: Record<string, Record<number, boolean>>,
+  logsMap: LogsMap,
   elapsedDays: number
 ): MajorHabitSummary[] {
   return MAJOR_HABIT_CONFIGS.map((config) => {

@@ -14,7 +14,8 @@ import {
   computeAllDailyScores,
   computeStreakCount,
   computeMajorHabitsStats,
-  STREAK_THRESHOLD
+  STREAK_THRESHOLD,
+  calorieTargetFor
 } from '@/lib/habitScoring';
 import HabitGrid from '@/components/habits/HabitGrid';
 import HabitProgressGauge from '@/components/habits/HabitProgressGauge';
@@ -74,12 +75,15 @@ export default function HabitsPage() {
   // Switching months keeps the old month on screen, dimmed, until the new one arrives.
   const isSwitchingMonth = isFetching && !!data && (data.year !== selectedYear || data.month !== selectedMonth);
 
-  // Optimistic Toggle Checkbox
-  const handleToggleHabit = async (
+  /**
+   * Mark a habit for a day at a level (1 light, 2 medium, 3 dark), or clear it
+   * with level 0. Repaints scores instantly, then syncs with the server.
+   */
+  const handleSetHabitLevel = async (
     habitId: string,
     day: number,
     dateStr: string,
-    currentVal: boolean
+    level: number
   ) => {
     if (!data) return;
 
@@ -89,32 +93,22 @@ export default function HabitsPage() {
       return;
     }
 
-    const newVal = !currentVal;
+    const previousData = data;
+    const wasChecked = Boolean(data.logsMap[habitId]?.[day]);
+    const willBeChecked = level > 0;
+    const delta = (willBeChecked ? 1 : 0) - (wasChecked ? 1 : 0);
 
-    // 1. Optimistic Local State Update
-    const prevLogsMap = { ...data.logsMap };
-    const updatedLogsMap = {
-      ...data.logsMap,
-      [habitId]: {
-        ...(data.logsMap[habitId] || {}),
-        [day]: newVal
-      }
-    };
+    const habitLogs = { ...(data.logsMap[habitId] || {}) };
+    if (willBeChecked) habitLogs[day] = level;
+    else delete habitLogs[day];
+    const updatedLogsMap = { ...data.logsMap, [habitId]: habitLogs };
 
-    // Recalculate each habit count
     const updatedEachHabitStats = data.eachHabitStats.map((stat: any) => {
-      if (stat.habitId === habitId) {
-        const newCount = stat.count + (newVal ? 1 : -1);
-        return {
-          ...stat,
-          count: Math.max(0, newCount),
-          progressPercent: Math.round((Math.max(0, newCount) / data.daysInMonth) * 100)
-        };
-      }
-      return stat;
+      if (stat.habitId !== habitId) return stat;
+      const newCount = Math.max(0, stat.count + delta);
+      return { ...stat, count: newCount, progressPercent: Math.round((newCount / data.daysInMonth) * 100) };
     });
 
-    // Compute updated daily scores and counts
     const updatedDailyScores = computeAllDailyScores(
       data.habits,
       updatedLogsMap,
@@ -125,12 +119,13 @@ export default function HabitsPage() {
 
     const updatedDailyStats = data.dailyStats.map((ds: any) => {
       const match = updatedDailyScores.find(s => s.day === ds.day);
-      const newCount = ds.day === day ? ds.completedCount + (newVal ? 1 : -1) : ds.completedCount;
+      const newCount = ds.day === day ? Math.max(0, ds.completedCount + delta) : ds.completedCount;
       const score = match ? match.score : 0;
+      const possible = ds.totalHabits || data.habits.length;
       return {
         ...ds,
-        completedCount: Math.max(0, newCount),
-        percent: data.habits.length > 0 ? Math.round((Math.max(0, newCount) / data.habits.length) * 100) : 0,
+        completedCount: newCount,
+        percent: possible > 0 ? Math.round((newCount / possible) * 100) : 0,
         score,
         isBelowGoal: score < STREAK_THRESHOLD,
         isExempt: match ? match.isExempt : false,
@@ -147,15 +142,14 @@ export default function HabitsPage() {
     const elapsedDays = isCurrentMonth ? Math.max(1, todayDay) : data.daysInMonth;
     const newMajorHabitsStats = computeMajorHabitsStats(data.habits, updatedLogsMap, elapsedDays);
 
-    const totalDiff = newVal ? 1 : -1;
-    const newTotalCompleted = Math.max(0, data.overallStats.totalCompleted + totalDiff);
-    const newMonthlyProgress = data.overallStats.totalPossible > 0 
-      ? Number(((newTotalCompleted / data.overallStats.totalPossible) * 100).toFixed(1)) 
+    const newTotalCompleted = Math.max(0, data.overallStats.totalCompleted + delta);
+    const newMonthlyProgress = data.overallStats.totalPossible > 0
+      ? Number(((newTotalCompleted / data.overallStats.totalPossible) * 100).toFixed(1))
       : 0;
 
     const isToday = isCurrentMonth && day === todayDay;
-    const newTodayCount = isToday 
-      ? Math.max(0, data.overallStats.todayCompletedCount + totalDiff) 
+    const newTodayCount = isToday
+      ? Math.max(0, data.overallStats.todayCompletedCount + delta)
       : data.overallStats.todayCompletedCount;
 
     setData({
@@ -174,13 +168,11 @@ export default function HabitsPage() {
       }
     });
 
-    // 2. Network Sync
     try {
-      await toggleHabitLog(habitId, dateStr, newVal);
-    } catch (error) {
-      // Revert if network call fails
-      setData((prev: any) => ({ ...prev, logsMap: prevLogsMap }));
-      toast.error('Failed to sync habit status');
+      await toggleHabitLog(habitId, dateStr, willBeChecked, willBeChecked ? level : undefined);
+    } catch (error: any) {
+      setData(previousData);
+      toast.error(error?.message || 'Failed to sync habit status');
     }
   };
 
@@ -241,7 +233,7 @@ export default function HabitsPage() {
               calories: cal,
               protein: prot,
               workoutStatus: ws,
-              isMetCalories: cal > 2400,
+              isMetCalories: cal > calorieTargetFor(updateData.date),
               isMetProtein: prot >= 80
             };
           }
@@ -258,7 +250,7 @@ export default function HabitsPage() {
               calories: cal,
               protein: prot,
               workoutStatus: ws,
-              isMetCalories: cal > 2400,
+              isMetCalories: cal > calorieTargetFor(updateData.date),
               isMetProtein: prot >= 80
             };
           }
@@ -277,10 +269,11 @@ export default function HabitsPage() {
       loadMonthData(selectedYear, selectedMonth);
 
       if (updateData.calories !== undefined) {
-        if (updateData.calories > 2400) {
-          toast.success(`Calories surplus logged: ${updateData.calories} kcal (>2400 Target Met!)`);
+        const calTarget = calorieTargetFor(updateData.date);
+        if (updateData.calories > calTarget) {
+          toast.success(`Calories surplus logged: ${updateData.calories} kcal (>${calTarget} target met)`);
         } else if (updateData.calories > 0) {
-          toast(`Calories logged: ${updateData.calories} kcal (${2401 - updateData.calories} kcal to target)`, { icon: <Info className="h-4 w-4 text-clay-600" /> });
+          toast(`Calories logged: ${updateData.calories} kcal (${calTarget + 1 - updateData.calories} kcal to target)`, { icon: <Info className="h-4 w-4 text-clay-600" /> });
         }
       } else if (updateData.protein !== undefined) {
         if (updateData.protein >= 80) {
@@ -549,7 +542,7 @@ export default function HabitsPage() {
               dailyStats={data.dailyStats}
               dailyLeadActivity={data.dailyLeadActivity}
               latestEditableDate={data.latestEditableDate}
-              onToggleHabit={handleToggleHabit}
+              onSetHabitLevel={handleSetHabitLevel}
               onUpdateSleep={handleUpdateSleep}
               onUpdateMetric={handleUpdateMetric}
               onEditHabit={(h) => { setEditingHabit(h); setIsFormOpen(true); }}

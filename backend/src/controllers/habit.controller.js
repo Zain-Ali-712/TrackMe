@@ -8,13 +8,21 @@ import {
   STREAK_THRESHOLD,
   MAX_DAILY_SCORE,
   computeWeeklyWorstDayExemptions,
-  computeStreakCount
+  computeStreakCount,
+  isV2Date,
+  isAutoHabit,
+  autoKindFor,
+  levelFromCount,
+  levelOptionsFor,
+  calorieTargetFor,
+  LEVEL,
+  SCORING_V2_FROM
 } from '../lib/habitScoring.js';
 import { isDateEditable, getLatestEditableDate, toDateString } from '../lib/dateRules.js';
 
 // Default 22 starter habits based on user schedule
 export const DEFAULT_HABITS = [
-  { name: 'Wake up 4Am', icon: 'Clock', color: '#f59e0b', order: 1 },
+  { name: 'Wake up 5:30AM', icon: 'Clock', color: '#f59e0b', order: 1 },
   { name: 'Workout / Rest', icon: 'Dumbbell', color: '#10b981', order: 2 },
   { name: 'Morning shower', icon: 'Droplets', color: '#06b6d4', order: 3 },
   { name: 'Brush Teeth', icon: 'Sparkles', color: '#0ea5e9', order: 4 },
@@ -28,18 +36,43 @@ export const DEFAULT_HABITS = [
   { name: 'Book Reading', icon: 'BookOpen', color: '#f59e0b', order: 12 },
   { name: 'Learning Videos', icon: 'Video', color: '#ef4444', order: 13 },
   { name: 'Journaling', icon: 'PenTool', color: '#14b8a6', order: 14 },
-  { name: 'Writing Dreams', icon: 'Sparkles', color: '#8b5cf6', order: 15 },
+  { name: 'Writing Goals', icon: 'Sparkles', color: '#8b5cf6', order: 15 },
   { name: '5 Prayers', icon: 'Sun', color: '#10b981', order: 16 },
   { name: 'No Doom Scroll', icon: 'SmartphoneOff', color: '#f43f5e', order: 17 },
   { name: 'No Disrespecting', icon: 'Smile', color: '#10b981', order: 18 },
   { name: 'No Movie / show', icon: 'Tv2', color: '#64748b', order: 19 },
   { name: 'Sleep on time', icon: 'Moon', color: '#6366f1', order: 20 },
+  { name: 'Read before Sleep', icon: 'BookOpen', color: '#6366f1', order: 20.5 },
   { name: 'Calories Surplus', icon: 'UtensilsCrossed', color: '#f97316', order: 21 },
   { name: 'Protein Amount', icon: 'Activity', color: '#10b981', order: 22 }
 ];
 
 /** Load the active habit list, seeding the defaults the first time. */
+/**
+ * One-time renames and additions for the 2026-10-24 scoring update. Idempotent,
+ * so it is safe on every cold start. Scoring matches by keyword, so renamed
+ * habits keep scoring their past days exactly as before.
+ */
+let catalogSynced = false;
+async function syncHabitCatalog() {
+  if (catalogSynced) return;
+  await Habit.updateMany({ name: { $regex: /^writing\s+dreams?$/i } }, { name: 'Writing Goals' });
+  await Habit.updateMany({ name: { $regex: /^wake\s*up\b.*\b4\s*(am)?\b/i } }, { name: 'Wake up 5:30AM' });
+  const existing = await Habit.findOne({ name: { $regex: /read\s+before\s+sleep/i } });
+  if (!existing && (await Habit.countDocuments()) > 0) {
+    const sleepHabit = await Habit.findOne({ name: { $regex: /sleep\s+on\s+time/i } });
+    await Habit.create({
+      name: 'Read before Sleep',
+      icon: 'BookOpen',
+      color: '#6366f1',
+      order: (sleepHabit?.order ?? 20) + 0.5
+    });
+  }
+  catalogSynced = true;
+}
+
 async function loadHabits() {
+  await syncHabitCatalog();
   let habits = await Habit.find({ archived: false }).sort({ order: 1, createdAt: 1 });
 
   if (habits.length === 0) {
@@ -117,7 +150,7 @@ export const getMonthData = async (req, res) => {
     const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
 
     const [logs, metrics, leadsInMonth, coldCallsInMonth] = await Promise.all([
-      HabitLog.find({ date: { $regex: monthRegex }, completed: true }).select('habit date value'),
+      HabitLog.find({ date: { $regex: monthRegex }, completed: true }).select('habit date value level'),
       DailyMetric.find({ date: { $regex: monthRegex } }).select('date sleepHours notes calories protein workoutStatus'),
       Lead.find({ createdAt: { $gte: startOfMonth, $lte: endOfMonth } }).select('createdAt'),
       Lead.find({
@@ -175,7 +208,7 @@ export const getMonthData = async (req, res) => {
         calories: cal,
         protein: prot,
         workoutStatus: ws,
-        isMetCalories: cal > 2400,
+        isMetCalories: cal > calorieTargetFor(dateStr),
         isMetProtein: prot >= 80
       };
     });
@@ -193,7 +226,23 @@ export const getMonthData = async (req, res) => {
       const habitId = log.habit.toString();
       if (!logsMap[habitId]) return;
       const dayNum = parseInt(log.date.split('-')[2], 10);
-      if (!Number.isNaN(dayNum)) logsMap[habitId][dayNum] = true;
+      if (!Number.isNaN(dayNum)) logsMap[habitId][dayNum] = log.level || LEVEL.DARK;
+    });
+
+    // From the v2 date, Lead generation and Cold calls are not ticked by hand:
+    // their level comes from the day's real counts.
+    habits.forEach((habit) => {
+      const kind = autoKindFor(habit.name);
+      if (!kind) return;
+      const habitId = habit._id.toString();
+      const counts = kind === 'leads' ? leadsByDay : callsByDay;
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${monthPrefix}-${String(day).padStart(2, '0')}`;
+        if (!isAutoHabit(habit.name, dateStr)) continue;
+        const level = levelFromCount(counts[day] || 0, kind);
+        if (level) logsMap[habitId][day] = level;
+        else delete logsMap[habitId][day];
+      }
     });
 
     // { [dayOfMonth]: { sleepHours, notes, calories, protein, workoutStatus } }
@@ -231,19 +280,32 @@ export const getMonthData = async (req, res) => {
     const weekdaysShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
     const dailyStatsDraft = [];
     let totalCompletedMonth = 0;
+    let totalPossibleMonth = 0;
 
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${monthPrefix}-${String(day).padStart(2, '0')}`;
       const dayDate = new Date(year, month - 1, day);
 
-      const checkedNames = [];
+      const checked = [];
       habits.forEach((habit) => {
         const habitId = habit._id.toString();
-        if (logsMap[habitId][day]) checkedNames.push(nameByHabitId[habitId]);
+        const level = logsMap[habitId][day];
+        if (level) checked.push({ name: nameByHabitId[habitId], level });
       });
+      const checkedNames = checked.map((c) => c.name);
+
+      // A habit added later (e.g. "Read before Sleep") was never possible on
+      // earlier days, so it must not lower those days' completion figures.
+      // Only habits added from the v2 date on are held back, so older days keep
+      // exactly the figures they always had.
+      const habitsThatDay = habits.filter((h) => {
+        const added = h.createdAt ? toDateString(new Date(h.createdAt)) : '';
+        return !added || added < SCORING_V2_FROM || added <= dateStr;
+      }).length;
+      totalPossibleMonth += habitsThatDay;
 
       totalCompletedMonth += checkedNames.length;
-      const score = calculateDailyHabitScore(checkedNames);
+      const score = calculateDailyHabitScore(checked, dateStr);
 
       dailyStatsDraft.push({
         day,
@@ -251,8 +313,8 @@ export const getMonthData = async (req, res) => {
         weekday: weekdaysShort[dayDate.getDay()],
         isSunday: dayDate.getDay() === 0,
         completedCount: checkedNames.length,
-        totalHabits: habits.length,
-        percent: habits.length > 0 ? Math.round((checkedNames.length / habits.length) * 100) : 0,
+        totalHabits: habitsThatDay,
+        percent: habitsThatDay > 0 ? Math.round((checkedNames.length / habitsThatDay) * 100) : 0,
         score,
         isBelowGoal: score < STREAK_THRESHOLD,
         sleepHours: (metricsMap[day] || {}).sleepHours || 0
@@ -269,7 +331,7 @@ export const getMonthData = async (req, res) => {
       isExempt: exemptDays.has(ds.day)
     }));
 
-    const totalPossible = habits.length * daysInMonth;
+    const totalPossible = totalPossibleMonth;
     const monthlyProgressPercent = totalPossible > 0
       ? Number(((totalCompletedMonth / totalPossible) * 100).toFixed(1))
       : 0;
@@ -295,7 +357,7 @@ export const getMonthData = async (req, res) => {
         calories: cal,
         protein: prot,
         workoutStatus: ws,
-        isMetCalories: cal > 2400,
+        isMetCalories: cal > calorieTargetFor(dateStr),
         isMetProtein: prot >= 80
       });
     }
@@ -306,7 +368,7 @@ export const getMonthData = async (req, res) => {
     // that group's checks completed.
     const majorConfigs = [
       { key: 'book_reading', title: 'Book Reading', habits: ['book'], subtitle: 'Daily Reading' },
-      { key: 'journaling', title: 'Journaling', habits: ['journal', 'dream'], subtitle: 'Journaling & Dreams' },
+      { key: 'journaling', title: 'Journaling', habits: ['journal', 'dream', 'goal'], subtitle: 'Journaling & Goals' },
       { key: 'development', title: 'Development', habits: ['fyp', 'project'], subtitle: 'FYP & Project Dev' },
       { key: 'leads_calls', title: 'Leads & Calls', habits: ['coldcall', 'lead'], subtitle: 'Cold Call & Leads' },
       { key: 'workout', title: 'Workout', habits: ['workout'], subtitle: 'Training & Rest' },
@@ -354,6 +416,7 @@ export const getMonthData = async (req, res) => {
       majorHabitsStats,
       streakCount,
       streakThreshold: STREAK_THRESHOLD,
+      scoringV2From: SCORING_V2_FROM,
       maxDailyScore: MAX_DAILY_SCORE,
       todayScore: todayStat ? todayStat.score : 0,
       // Habits may only be edited for today and the previous day.
@@ -386,6 +449,7 @@ export const toggleHabit = async (req, res) => {
     if (!habitId || !date) {
       return res.status(400).json({ message: 'habitId and date are required' });
     }
+    const requestedLevel = Number(req.body.level) || LEVEL.DARK;
 
     // Days older than yesterday are frozen — reject rather than trust the client.
     if (!isDateEditable(date)) {
@@ -394,10 +458,16 @@ export const toggleHabit = async (req, res) => {
       });
     }
 
+    const habit = await Habit.findById(habitId);
+    if (habit && isAutoHabit(habit.name, date)) {
+      return res.status(400).json({
+        message: `${habit.name} fills in automatically from your leads and calls for the day.`
+      });
+    }
+
     if (completed) {
-      // Enforce lead generation & cold calls validation
-      const habit = await Habit.findById(habitId);
-      if (habit) {
+      // Enforce lead generation & cold calls validation (before the v2 date)
+      if (habit && !isV2Date(date)) {
         const hName = (habit.name || '').toLowerCase();
         if (hName.includes('lead')) {
           const allLeads = await Lead.find().select('createdAt');
@@ -418,9 +488,15 @@ export const toggleHabit = async (req, res) => {
         }
       }
 
+      // Levels only exist from the v2 date; earlier days stay plain ticks.
+      const update = { completed: true };
+      if (habit && isV2Date(date)) {
+        const options = levelOptionsFor(habit.name, date);
+        update.level = options.includes(requestedLevel) ? requestedLevel : options[options.length - 1];
+      }
       const log = await HabitLog.findOneAndUpdate(
         { habit: habitId, date },
-        { completed: true },
+        update,
         { upsert: true, new: true }
       );
       res.json({ success: true, log });
@@ -462,7 +538,7 @@ export const updateDailyMetric = async (req, res) => {
     if (calories !== undefined) {
       const calHabit = await Habit.findOne({ name: { $regex: /calorie/i }, archived: false });
       if (calHabit) {
-        if (parseFloat(calories) > 2400) {
+        if (parseFloat(calories) > calorieTargetFor(date)) {
           await HabitLog.findOneAndUpdate(
             { habit: calHabit._id, date },
             { completed: true, value: parseFloat(calories) },

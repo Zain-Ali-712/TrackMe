@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Check, Edit2, Plus, Flame, Lock, Dumbbell, Moon, X, UtensilsCrossed, Activity, Sparkles, ShieldCheck } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn, getHabitIcon } from '@/lib/utils';
-import { STREAK_THRESHOLD, getHabitWeight, isPartnerFulfilledHabit } from '@/lib/habitScoring';
+import {
+  STREAK_THRESHOLD, getHabitWeight, isPartnerFulfilledHabit, levelOptionsFor, isAutoHabit,
+  autoKindFor, pointsForLevel, calorieTargetFor, isV2Date, LEVEL_LABELS, AUTO_LEVEL_THRESHOLDS, type LogsMap,
+} from '@/lib/habitScoring';
+import { useIsDark } from '@/lib/chartTheme';
 import toast from 'react-hot-toast';
 
 interface HabitGridProps {
@@ -10,14 +14,15 @@ interface HabitGridProps {
   month: number;
   daysInMonth: number;
   habits: any[];
-  logsMap: Record<string, Record<number, boolean>>;
+  logsMap: LogsMap;
   metricsMap?: Record<number, { sleepHours: number; notes: string; calories?: number; protein?: number; workoutStatus?: string }>;
   eachHabitStats: any[];
   dailyStats: any[];
   dailyLeadActivity?: { leadsByDay: Record<number, number>; callsByDay: Record<number, number> };
   /** Oldest date that may still be toggled — today and yesterday. From the API. */
   latestEditableDate?: string;
-  onToggleHabit: (habitId: string, day: number, dateStr: string, currentVal: boolean) => void;
+  /** Mark a habit for a day at a level (1 light, 2 medium, 3 dark); 0 clears it. */
+  onSetHabitLevel: (habitId: string, day: number, dateStr: string, level: number) => void;
   onUpdateSleep?: (dateStr: string, hours: number) => void;
   onUpdateMetric?: (data: { date: string; calories?: number; protein?: number; workoutStatus?: string }) => void;
   onEditHabit: (habit: any) => void;
@@ -41,6 +46,140 @@ interface MetricCellProps {
   onSave: (val: number) => void;
 }
 
+/**
+ * GitHub contribution-graph greens, exact values, light and dark themes.
+ * Index = level: 0 none, 1 light, 2 medium, 3 dark (a full tick).
+ */
+export const GITHUB_GREENS = {
+  light: ['#ebedf0', '#9be9a8', '#40c463', '#216e39'],
+  dark: ['#161b22', '#0e4429', '#006d32', '#39d353'],
+} as const;
+
+const levelSquareStyle = (level: number, isDark: boolean): React.CSSProperties => ({
+  backgroundColor: (isDark ? GITHUB_GREENS.dark : GITHUB_GREENS.light)[Math.max(0, Math.min(3, level))],
+  boxShadow: isDark ? 'inset 0 0 0 1px rgba(255,255,255,0.05)' : 'inset 0 0 0 1px rgba(27,31,35,0.06)',
+});
+
+const SQUARE = 'w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 outline-none';
+
+interface LevelCellProps {
+  habitName: string;
+  day: number;
+  dateStr: string;
+  level: number;
+  options: number[];
+  isEditable: boolean;
+  lockedReason: string;
+  tdClassName: string;
+  auto?: { kind: 'leads' | 'calls'; count: number } | null;
+  partnerFulfilled?: boolean;
+  onSet: (level: number) => void;
+  /** Returns false to block marking (legacy lead/call checks). */
+  canMark?: () => boolean;
+}
+
+/** One day for one habit: a GitHub-style square with its own way to mark it. */
+function LevelCell({
+  habitName, day, dateStr, level, options, isEditable, lockedReason, tdClassName, auto, partnerFulfilled, onSet, canMark,
+}: LevelCellProps) {
+  const isDark = useIsDark();
+  const style = levelSquareStyle(level, isDark);
+  const pointsText = (l: number) => `${pointsForLevel(habitName, l, dateStr)}%`;
+
+  // Auto-filled from the day's leads / calls: shown, never clicked.
+  if (auto) {
+    const unit = auto.kind === 'leads' ? 'lead' : 'call';
+    const t = AUTO_LEVEL_THRESHOLDS[auto.kind];
+    return (
+      <td className={tdClassName}>
+        <div
+          className={SQUARE}
+          style={style}
+          title={`${auto.count} ${unit}${auto.count === 1 ? '' : 's'} on day ${day}${level ? `: ${LEVEL_LABELS[level]} (+${pointsText(level)})` : ''}. Fills in automatically: 1-${t.medium - 1} light, ${t.medium}-${t.dark - 1} medium, ${t.dark}+ dark.`}
+        />
+      </td>
+    );
+  }
+
+  if (!isEditable) {
+    return (
+      <td className={cn(tdClassName, 'cursor-not-allowed')} title={level ? `${LEVEL_LABELS[level]} (${pointsText(level)}). ${lockedReason}` : lockedReason}>
+        <div className={SQUARE} style={partnerFulfilled && !level ? undefined : style}>
+          {partnerFulfilled && !level && <Check className="h-3 w-3 stroke-[2.5] text-slate-400" />}
+        </div>
+      </td>
+    );
+  }
+
+  // Plain tick: one click marks it dark, another clears it.
+  if (options.length <= 1) {
+    return (
+      <td
+        className={cn(tdClassName, 'cursor-pointer')}
+        onClick={() => {
+          if (!level && canMark && !canMark()) return;
+          onSet(level ? 0 : options[0]);
+        }}
+        title={level ? `Done (${pointsText(3)}). Click to clear` : partnerFulfilled ? 'Fulfilled via partner habit (click to mark this one too)' : 'Click to mark done'}
+      >
+        <div className={cn(SQUARE, 'hover:ring-2 hover:ring-slate-300/80 dark:hover:ring-slate-600')} style={style}>
+          {partnerFulfilled && !level && <Check className="h-3 w-3 stroke-[2.5] text-slate-400" />}
+        </div>
+      </td>
+    );
+  }
+
+  // Levels: a small picker with only this habit's colours.
+  return (
+    <td className={tdClassName}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(SQUARE, 'cursor-pointer hover:ring-2 hover:ring-slate-300/80 dark:hover:ring-slate-600 focus-visible:ring-2 focus-visible:ring-clay-500/40')}
+            style={style}
+            title={level ? `${LEVEL_LABELS[level]} (${pointsText(level)}). Click to change` : 'Click to choose how much you did'}
+            aria-label={`${habitName}, day ${day}: ${level ? LEVEL_LABELS[level] : 'not done'}`}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="center" className="w-auto min-w-0 p-2.5">
+          <p className="flex items-baseline justify-between gap-3 px-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+            <span className="truncate max-w-[150px]">{habitName}</span>
+            <span className="font-normal text-slate-400">Day {day}</span>
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            {options.map((l) => (
+              <DropdownMenuItem
+                key={l}
+                onSelect={() => onSet(l)}
+                className={cn(
+                  'flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer',
+                  l === level && 'bg-slate-100 dark:bg-slate-800'
+                )}
+              >
+                <span
+                  className={cn('h-7 w-7 rounded-[6px]', l === level && 'ring-2 ring-offset-2 ring-slate-400 ring-offset-white dark:ring-offset-slate-900')}
+                  style={levelSquareStyle(l, isDark)}
+                />
+                <span className="text-[10.5px] font-medium text-slate-700 dark:text-slate-200">{LEVEL_LABELS[l]}</span>
+                <span className="text-[10px] tabular-nums text-slate-400">+{pointsText(l)}</span>
+              </DropdownMenuItem>
+            ))}
+          </div>
+          {level > 0 && (
+            <DropdownMenuItem
+              onSelect={() => onSet(0)}
+              className="mt-1.5 justify-center gap-1 text-[11px] text-slate-500 hover:text-rose-600 focus:text-rose-600 cursor-pointer"
+            >
+              <X className="h-3 w-3" /> Clear
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </td>
+  );
+}
+
 function MetricInputCell({
   day,
   currentVal,
@@ -56,6 +195,8 @@ function MetricInputCell({
   presets,
   onSave
 }: MetricCellProps) {
+  const isDark = useIsDark();
+  const metStyle = isMet ? levelSquareStyle(3, isDark) : undefined;
   const [valInput, setValInput] = useState(currentVal > 0 ? String(currentVal) : '');
   const [isOpen, setIsOpen] = useState(false);
 
@@ -90,10 +231,11 @@ function MetricInputCell({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
+              style={metStyle}
               className={cn(
-                "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border cursor-pointer outline-none shadow-2xs relative",
+                "w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 border cursor-pointer outline-none relative",
                 isMet
-                  ? "bg-emerald-500 text-white border-emerald-600 dark:bg-emerald-500 dark:text-white dark:border-emerald-400 dark:shadow-[0_0_8px_rgba(16,185,129,0.35)]"
+                  ? "text-white border-transparent"
                   : currentVal > 0
                   ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700"
                   : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80"
@@ -171,10 +313,11 @@ function MetricInputCell({
         </DropdownMenu>
       ) : (
         <div
+          style={metStyle}
           className={cn(
-            "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border opacity-55 saturate-[0.85] cursor-not-allowed",
+            "w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 border cursor-not-allowed",
             isMet
-              ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400"
+              ? "text-white border-transparent"
               : currentVal > 0
               ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700"
               : "border-slate-250 bg-slate-50/50 dark:bg-slate-800/80 dark:border-slate-700"
@@ -203,7 +346,7 @@ export default function HabitGrid({
   dailyStats,
   dailyLeadActivity,
   latestEditableDate,
-  onToggleHabit,
+  onSetHabitLevel,
   onUpdateMetric,
   onEditHabit,
   onAddHabit
@@ -391,9 +534,9 @@ export default function HabitGrid({
                         {/* Percentage weightage badge aligned on the right */}
                         <span 
                           className="px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-tight bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 tabular-nums"
-                          title={`${getHabitWeight(habit.name)}% daily score weightage`}
+                          title={`${getHabitWeight(habit.name, todayStr)}% of the daily score${autoKindFor(habit.name) || /fyp|project/i.test(habit.name) ? ' on its own (more when its partner habit is done too)' : ''}`}
                         >
-                          {getHabitWeight(habit.name)}%
+                          {getHabitWeight(habit.name, todayStr)}%
                         </span>
                         <button
                           onClick={() => onEditHabit(habit)}
@@ -417,25 +560,26 @@ export default function HabitGrid({
                     const dayStat = dailyStats[day - 1];
                     const isBelowGoal = isPastDay && Boolean(dayStat && dayStat.score < STREAK_THRESHOLD);
 
-                    // 1. Special Case: Calories Habit Input (> 2400 kcal)
+                    // 1. Special Case: Calories Habit Input (> 2550 kcal from 2026-10-24, 2400 before)
                     if (isCalorieHabit) {
                       const currentCal = metricsMap?.[day]?.calories || 0;
+                      const calTarget = calorieTargetFor(dateStr);
                       return (
                         <MetricInputCell
                           key={day}
                           day={day}
                           dateStr={dateStr}
                           currentVal={currentCal}
-                          targetThreshold={2400}
+                          targetThreshold={calTarget}
                           targetComparison="greater"
                           unit=" kcal"
-                          isMet={isChecked || currentCal > 2400}
+                          isMet={isChecked || currentCal > calTarget}
                           isEditable={isEditable}
                           isToday={isToday}
                           isBelowGoal={isBelowGoal}
                           label="Calories Surplus"
                           icon={<UtensilsCrossed className="h-3.5 w-3.5 text-orange-500" />}
-                          presets={[2450, 2600, 2800, 3000]}
+                          presets={calTarget > 2400 ? [2600, 2800, 3000, 3200] : [2450, 2600, 2800, 3000]}
                           onSave={(val) => {
                             if (onUpdateMetric) onUpdateMetric({ date: dateStr, calories: val });
                           }}
@@ -489,7 +633,7 @@ export default function HabitGrid({
                                   className={cn(
                                     "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border cursor-pointer outline-none shadow-2xs",
                                     workoutStatus === 'workout'
-                                      ? "bg-emerald-500 text-white border-emerald-600 dark:bg-emerald-500 dark:text-white dark:border-emerald-400 dark:shadow-[0_0_8px_rgba(16,185,129,0.35)]"
+                                      ? "bg-[#216e39] text-white border-transparent dark:bg-[#39d353] dark:text-slate-950"
                                       : workoutStatus === 'rest'
                                       ? "bg-slate-400 dark:bg-slate-600 text-white border-slate-500 dark:border-slate-500"
                                       : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80"
@@ -533,9 +677,9 @@ export default function HabitGrid({
                           ) : (
                             <div
                               className={cn(
-                                "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border opacity-55 saturate-[0.85] cursor-not-allowed",
+                                "w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 border cursor-not-allowed",
                                 workoutStatus === 'workout'
-                                  ? "bg-emerald-500 text-white border-emerald-600 dark:border-emerald-400"
+                                  ? "bg-[#216e39] text-white border-transparent dark:bg-[#39d353] dark:text-slate-950"
                                   : workoutStatus === 'rest'
                                   ? "bg-slate-400 dark:bg-slate-600 text-white border-slate-500 dark:border-slate-500"
                                   : "border-slate-250 bg-slate-50/50 dark:bg-slate-800/80 dark:border-slate-700"
@@ -550,49 +694,43 @@ export default function HabitGrid({
                       );
                     }
 
-                    // 4. Default Habit Checkbox (with Grouped Partner Fulfilled & Lead Safeguards)
-                    const isPartnerFulfilled = !isChecked && isPartnerFulfilledHabit(habit.name, day, logsMap, habits);
+                    // 4. Everything else: GitHub-style level cell
+                    const level = Number(logsMap[hId]?.[day] || 0);
+                    const autoKind = isAutoHabit(habit.name, dateStr) ? autoKindFor(habit.name) : null;
+                    const isPartnerFulfilled = !level && isPartnerFulfilledHabit(habit.name, day, logsMap, habits, dateStr);
+                    const lockedReason = isPastMonth
+                      ? 'This month has passed. Habits can only be changed for today and yesterday.'
+                      : dateStr > todayStr
+                      ? 'This day has not happened yet.'
+                      : 'This day is locked. Habits can only be changed for today and yesterday.';
 
                     return (
-                      <td
+                      <LevelCell
                         key={day}
-                        onClick={() => {
-                          if (!isEditable) return;
-
-                          // Validation checks for Lead generation and Coldcall habits
-                          if (!isChecked) {
-                            if (isLeadHabit) {
-                              const count = dailyLeadActivity?.leadsByDay?.[day] || 0;
-                              if (count === 0) {
-                                toast.error(`Cannot check 'Lead generation': No new leads added for ${dateStr}. Please add at least 1 lead in Leads first.`);
-                                return;
-                              }
-                            }
-                            if (isColdCallHabit) {
-                              const count = dailyLeadActivity?.callsByDay?.[day] || 0;
-                              if (count === 0) {
-                                toast.error(`Cannot check 'Coldcall / Practice': No cold calls logged for ${dateStr}. Please log at least 1 call in Leads first.`);
-                                return;
-                              }
-                            }
+                        habitName={habit.name}
+                        day={day}
+                        dateStr={dateStr}
+                        level={level}
+                        options={levelOptionsFor(habit.name, dateStr)}
+                        isEditable={isEditable}
+                        lockedReason={lockedReason}
+                        auto={autoKind ? { kind: autoKind, count: (autoKind === 'leads' ? dailyLeadActivity?.leadsByDay : dailyLeadActivity?.callsByDay)?.[day] || 0 } : null}
+                        partnerFulfilled={isPartnerFulfilled}
+                        onSet={(next) => onSetHabitLevel(hId, day, dateStr, next)}
+                        canMark={() => {
+                          // Before the auto-fill date, leads/calls are ticked by hand but need real activity.
+                          if (isV2Date(dateStr)) return true;
+                          if (isLeadHabit && !(dailyLeadActivity?.leadsByDay?.[day] || 0)) {
+                            toast.error(`Cannot check 'Lead generation': No new leads added for ${dateStr}.`);
+                            return false;
                           }
-
-                          onToggleHabit(hId, day, dateStr, isChecked);
+                          if (isColdCallHabit && !(dailyLeadActivity?.callsByDay?.[day] || 0)) {
+                            toast.error(`Cannot check 'Coldcall / Practice': No cold calls logged for ${dateStr}.`);
+                            return false;
+                          }
+                          return true;
                         }}
-                        title={
-                          isPartnerFulfilled
-                            ? 'Fulfilled via partner habit (Click to mark both completed)'
-                            : isChecked
-                            ? 'Completed'
-                            : isEditable
-                            ? 'Click to mark complete'
-                            : isPastMonth
-                            ? 'This month has passed. Habits can only be changed for today and yesterday.'
-                            : dateStr > todayStr
-                            ? 'This day has not happened yet.'
-                            : 'This day is locked. Habits can only be changed for today and yesterday.'
-                        }
-                        className={cn(
+                        tdClassName={cn(
                           "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
                           isToday
                             ? "bg-clay-50/40 dark:bg-clay-950/20"
@@ -600,37 +738,9 @@ export default function HabitGrid({
                             ? "bg-rose-50/25 dark:bg-rose-950/10"
                             : isSunday
                             ? "dark:bg-amber-950/10"
-                            : "",
-                          isEditable
-                            ? "cursor-pointer"
-                            : "cursor-not-allowed",
-                          isEditable
-                            ? isChecked
-                              ? "hover:opacity-90"
-                              : "hover:bg-slate-100/60 dark:hover:bg-slate-800/40"
                             : ""
                         )}
-                      >
-                        <div
-                          className={cn(
-                            "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border",
-                            isEditable && "cursor-pointer",
-                            !isEditable && "opacity-55 saturate-[0.85]",
-                            isChecked
-                              ? "bg-emerald-500 text-white border-emerald-600 dark:bg-emerald-500 dark:text-white dark:border-emerald-400 dark:shadow-[0_0_8px_rgba(16,185,129,0.35)] scale-100"
-                              : isPartnerFulfilled
-                              ? "bg-slate-200/90 dark:bg-slate-700/70 border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-slate-400 shadow-2xs"
-                              : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80",
-                            !isEditable && "hover:border-slate-250 hover:bg-slate-50/50 dark:hover:bg-slate-800/80 dark:hover:border-slate-700"
-                          )}
-                        >
-                          {isChecked ? (
-                            <Check className="h-3.5 w-3.5 stroke-[3]" />
-                          ) : isPartnerFulfilled ? (
-                            <Check className="h-3 w-3 stroke-[2.5] opacity-65 text-slate-500 dark:text-slate-300" />
-                          ) : null}
-                        </div>
-                      </td>
+                      />
                     );
                   })}
 
@@ -746,38 +856,36 @@ export default function HabitGrid({
         </table>
       </div>
 
-      {/* Legend: explains cells, workout options, and locked status */}
+      {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+        <GreensLegend />
         <span className="flex items-center gap-1.5">
-          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" strokeWidth={3} />
-          Completed
+          <Dumbbell className="h-3 w-3" />
+          Workout / <Moon className="h-3 w-3" /> Rest (rest counts as done)
         </span>
-        <span className="flex items-center gap-1.5">
-          <Dumbbell className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-          Workout (Green)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Moon className="h-3 w-3 text-slate-500 dark:text-slate-400" />
-          Rest Day (Grey - counts as completed task)
-        </span>
-        <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-          <UtensilsCrossed className="h-3 w-3 text-orange-500" />
-          Calories: &gt;2400 kcal | Protein: &ge;80g (auto-ticks)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm border border-slate-250 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/80" />
-          Not done / Skipped
-        </span>
+        <span>Calories &gt;{calorieTargetFor(todayStr)} kcal and protein &ge;80g tick themselves</span>
+        <span>Leads and cold calls fill in from the day's counts</span>
         {!isPastMonth && (
           <span className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">
             <Lock className="h-3 w-3" />
-            Locked — only today and yesterday can be edited
-            {editableFrom && (
-              <span className="tabular-nums">({editableFrom} onward)</span>
-            )}
+            Only today and yesterday can be edited
+            {editableFrom && <span className="tabular-nums">({editableFrom} onward)</span>}
           </span>
         )}
       </div>
     </div>
+  );
+}
+
+function GreensLegend() {
+  const isDark = useIsDark();
+  return (
+    <span className="flex items-center gap-1.5" aria-label="Less to more">
+      Less
+      {[0, 1, 2, 3].map((l) => (
+        <span key={l} className="h-3 w-3 rounded-[3px]" style={levelSquareStyle(l, isDark)} />
+      ))}
+      More
+    </span>
   );
 }

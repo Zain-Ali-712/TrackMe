@@ -79,6 +79,9 @@ export function getNicheIcon(iconKey?: string): LucideIcon {
 
 export const HABIT_ICON_MAP: Record<string, LucideIcon> = {
   'wake up early (4)': Clock,
+  'wake up 5:30am': Clock,
+  'writing goals': Sparkles,
+  'read before sleep': BookOpen,
   'workout / rest': Dumbbell,
   'morning shower': Droplets,
   'namaz / dua': HeartHandshake,

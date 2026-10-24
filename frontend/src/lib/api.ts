@@ -129,8 +129,9 @@ export const createHabit = (data: any) => fetchAPI('/habits', { method: 'POST', 
 export const updateHabit = (id: string, data: any) => fetchAPI(`/habits/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteHabit = (id: string) => fetchAPI(`/habits/${id}`, { method: 'DELETE' });
 export const fetchMonthHabitData = (year: number, month: number) => fetchAPI(`/habits/month?year=${year}&month=${month}`);
-export const toggleHabitLog = (habitId: string, date: string, completed: boolean) => 
-  fetchAPI('/habits/toggle', { method: 'POST', body: JSON.stringify({ habitId, date, completed }) });
+/** Mark (or clear) a habit for a day. `level` is 1 light, 2 medium, 3 dark. */
+export const toggleHabitLog = (habitId: string, date: string, completed: boolean, level?: number) =>
+  fetchAPI('/habits/toggle', { method: 'POST', body: JSON.stringify({ habitId, date, completed, level }) });
 export const updateDailyMetric = (data: {
   date: string;
   sleepHours?: number;
