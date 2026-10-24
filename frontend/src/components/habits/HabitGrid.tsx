@@ -51,16 +51,17 @@ interface MetricCellProps {
  * Index = level: 0 none, 1 light, 2 medium, 3 dark (a full tick).
  */
 export const GITHUB_GREENS = {
-  light: ['#ebedf0', '#9be9a8', '#40c463', '#216e39'],
-  dark: ['#161b22', '#0e4429', '#006d32', '#39d353'],
+  light: ['#eff2f5', '#aceebb', '#2da44e', '#116329'],
+  dark: ['#151b23', '#033a16', '#2ea043', '#56d364'],
 } as const;
 
 const levelSquareStyle = (level: number, isDark: boolean): React.CSSProperties => ({
   backgroundColor: (isDark ? GITHUB_GREENS.dark : GITHUB_GREENS.light)[Math.max(0, Math.min(3, level))],
-  boxShadow: isDark ? 'inset 0 0 0 1px rgba(255,255,255,0.05)' : 'inset 0 0 0 1px rgba(27,31,35,0.06)',
+  // GitHub outlines every square with a faint 1px border.
+  boxShadow: isDark ? 'inset 0 0 0 1px rgba(1,4,9,0.12)' : 'inset 0 0 0 1px rgba(31,35,40,0.05)',
 });
 
-const SQUARE = 'w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 outline-none';
+const SQUARE = 'w-3.5 h-3.5 mx-auto rounded-[3px] transition-all duration-150 outline-none';
 
 interface LevelCellProps {
   habitName: string;
@@ -104,9 +105,7 @@ function LevelCell({
   if (!isEditable) {
     return (
       <td className={cn(tdClassName, 'cursor-not-allowed')} title={level ? `${LEVEL_LABELS[level]} (${pointsText(level)}). ${lockedReason}` : lockedReason}>
-        <div className={SQUARE} style={partnerFulfilled && !level ? undefined : style}>
-          {partnerFulfilled && !level && <Check className="h-3 w-3 stroke-[2.5] text-slate-400" />}
-        </div>
+        <div className={SQUARE} style={style} />
       </td>
     );
   }
@@ -122,9 +121,7 @@ function LevelCell({
         }}
         title={level ? `Done (${pointsText(3)}). Click to clear` : partnerFulfilled ? 'Fulfilled via partner habit (click to mark this one too)' : 'Click to mark done'}
       >
-        <div className={cn(SQUARE, 'hover:ring-2 hover:ring-slate-300/80 dark:hover:ring-slate-600')} style={style}>
-          {partnerFulfilled && !level && <Check className="h-3 w-3 stroke-[2.5] text-slate-400" />}
-        </div>
+        <div className={cn(SQUARE, 'hover:ring-2 hover:ring-slate-300/80 dark:hover:ring-slate-600')} style={style} />
       </td>
     );
   }
@@ -158,7 +155,7 @@ function LevelCell({
                 )}
               >
                 <span
-                  className={cn('h-7 w-7 rounded-[6px]', l === level && 'ring-2 ring-offset-2 ring-slate-400 ring-offset-white dark:ring-offset-slate-900')}
+                  className={cn('h-5 w-5 rounded-[4px]', l === level && 'ring-2 ring-offset-2 ring-slate-400 ring-offset-white dark:ring-offset-slate-900')}
                   style={levelSquareStyle(l, isDark)}
                 />
                 <span className="text-[10.5px] font-medium text-slate-700 dark:text-slate-200">{LEVEL_LABELS[l]}</span>
@@ -196,7 +193,7 @@ function MetricInputCell({
   onSave
 }: MetricCellProps) {
   const isDark = useIsDark();
-  const metStyle = isMet ? levelSquareStyle(3, isDark) : undefined;
+  const metStyle = levelSquareStyle(isMet ? 3 : 0, isDark);
   const [valInput, setValInput] = useState(currentVal > 0 ? String(currentVal) : '');
   const [isOpen, setIsOpen] = useState(false);
 
@@ -222,7 +219,7 @@ function MetricInputCell({
   return (
     <td
       className={cn(
-        "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+        "w-[24px] min-w-[24px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
         isToday ? "bg-clay-50/40 dark:bg-clay-950/20" : isBelowGoal ? "bg-rose-50/25 dark:bg-rose-950/10" : ""
       )}
     >
@@ -233,20 +230,16 @@ function MetricInputCell({
               type="button"
               style={metStyle}
               className={cn(
-                "w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 border cursor-pointer outline-none relative",
+                "w-3.5 h-3.5 mx-auto rounded-[3px] transition-all duration-150 cursor-pointer outline-none relative",
                 isMet
-                  ? "text-white border-transparent"
+                  ? ""
                   : currentVal > 0
-                  ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700"
-                  : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80"
+                  ? "ring-1 ring-inset ring-amber-400 dark:ring-amber-500/80"
+                  : "hover:ring-2 hover:ring-slate-300/80 dark:hover:ring-slate-600"
               )}
               title={tooltipText}
             >
-              {isMet ? (
-                <Check className="h-3.5 w-3.5 stroke-[3]" />
-              ) : currentVal > 0 ? (
-                <span className="text-[9px] font-bold leading-none">{formattedDisplay}</span>
-              ) : null}
+              {null}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" className="w-48 p-2.5 text-xs z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl">
@@ -315,20 +308,16 @@ function MetricInputCell({
         <div
           style={metStyle}
           className={cn(
-            "w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 border cursor-not-allowed",
+            "w-3.5 h-3.5 mx-auto rounded-[3px] transition-all duration-150 cursor-not-allowed",
             isMet
-              ? "text-white border-transparent"
+              ? ""
               : currentVal > 0
-              ? "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700"
-              : "border-slate-250 bg-slate-50/50 dark:bg-slate-800/80 dark:border-slate-700"
+              ? "ring-1 ring-inset ring-amber-400 dark:ring-amber-500/80"
+              : ""
           )}
           title="This day is locked."
         >
-          {isMet ? (
-            <Check className="h-3.5 w-3.5 stroke-[3]" />
-          ) : currentVal > 0 ? (
-            <span className="text-[9px] font-bold leading-none">{formattedDisplay}</span>
-          ) : null}
+          {null}
         </div>
       )}
     </td>
@@ -444,7 +433,7 @@ export default function HabitGrid({
                   <th
                     key={day}
                     className={cn(
-                      "min-w-[34px] w-[34px] p-1 font-bold transition-colors border-r border-slate-200/50 dark:border-slate-800",
+                      "min-w-[24px] w-[24px] px-0 py-1 font-bold transition-colors border-r border-slate-200/50 dark:border-slate-800",
                       isToday
                         ? "bg-clay-50/90 dark:bg-clay-950/40 text-clay-600 dark:text-clay-400"
                         : isBelowGoal
@@ -473,7 +462,7 @@ export default function HabitGrid({
                       </span>
                       <span
                         className={cn(
-                          "text-xs tabular-nums mt-0.5 w-5 h-5 rounded-full flex items-center justify-center font-bold",
+                          "text-[10.5px] tabular-nums mt-0.5 w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold",
                           isToday 
                             ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold shadow-xs" 
                             : isBelowGoal && !isExempt
@@ -621,7 +610,7 @@ export default function HabitGrid({
                         <td
                           key={day}
                           className={cn(
-                            "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+                            "w-[24px] min-w-[24px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
                             isToday ? "bg-clay-50/40 dark:bg-clay-950/20" : isBelowGoal ? "bg-rose-50/25 dark:bg-rose-950/10" : isSunday ? "dark:bg-amber-950/10" : ""
                           )}
                         >
@@ -631,12 +620,12 @@ export default function HabitGrid({
                                 <button
                                   type="button"
                                   className={cn(
-                                    "w-6 h-6 mx-auto rounded-md flex items-center justify-center transition-all duration-150 border cursor-pointer outline-none shadow-2xs",
+                                    "w-3.5 h-3.5 mx-auto rounded-[3px] transition-all duration-150 cursor-pointer outline-none hover:ring-2 hover:ring-slate-300/80 dark:hover:ring-slate-600",
                                     workoutStatus === 'workout'
-                                      ? "bg-[#216e39] text-white border-transparent dark:bg-[#39d353] dark:text-slate-950"
+                                      ? "bg-[#116329] dark:bg-[#56d364]"
                                       : workoutStatus === 'rest'
-                                      ? "bg-slate-400 dark:bg-slate-600 text-white border-slate-500 dark:border-slate-500"
-                                      : "border-slate-250 bg-slate-50/50 hover:border-slate-400 hover:bg-white dark:bg-slate-800/80 dark:border-slate-700 dark:hover:border-slate-500 dark:hover:bg-slate-700/80"
+                                      ? "bg-[#8c959f] dark:bg-[#6e7681]"
+                                      : "bg-[#eff2f5] dark:bg-[#151b23]"
                                   )}
                                   title={
                                     workoutStatus === 'workout'
@@ -646,8 +635,6 @@ export default function HabitGrid({
                                       : 'Click to select Workout or Rest Day'
                                   }
                                 >
-                                  {workoutStatus === 'workout' && <Dumbbell className="h-3.5 w-3.5 stroke-[2.5]" />}
-                                  {workoutStatus === 'rest' && <Moon className="h-3.5 w-3.5 stroke-[2.5]" />}
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="center" className="w-36 p-1 text-xs z-50">
@@ -677,17 +664,15 @@ export default function HabitGrid({
                           ) : (
                             <div
                               className={cn(
-                                "w-6 h-6 mx-auto rounded-[5px] flex items-center justify-center transition-all duration-150 border cursor-not-allowed",
+                                "w-3.5 h-3.5 mx-auto rounded-[3px] transition-all duration-150 cursor-not-allowed",
                                 workoutStatus === 'workout'
-                                  ? "bg-[#216e39] text-white border-transparent dark:bg-[#39d353] dark:text-slate-950"
+                                  ? "bg-[#116329] dark:bg-[#56d364]"
                                   : workoutStatus === 'rest'
-                                  ? "bg-slate-400 dark:bg-slate-600 text-white border-slate-500 dark:border-slate-500"
-                                  : "border-slate-250 bg-slate-50/50 dark:bg-slate-800/80 dark:border-slate-700"
+                                  ? "bg-[#8c959f] dark:bg-[#6e7681]"
+                                  : "bg-[#eff2f5] dark:bg-[#151b23]"
                               )}
                               title="This day is locked."
                             >
-                              {workoutStatus === 'workout' && <Dumbbell className="h-3.5 w-3.5 stroke-[2.5]" />}
-                              {workoutStatus === 'rest' && <Moon className="h-3.5 w-3.5 stroke-[2.5]" />}
                             </div>
                           )}
                         </td>
@@ -731,7 +716,7 @@ export default function HabitGrid({
                           return true;
                         }}
                         tdClassName={cn(
-                          "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
+                          "w-[24px] min-w-[24px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 transition-colors",
                           isToday
                             ? "bg-clay-50/40 dark:bg-clay-950/20"
                             : isBelowGoal
@@ -780,7 +765,7 @@ export default function HabitGrid({
                 <td
                   key={stat.day}
                   className={cn(
-                    "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-200/50 dark:border-slate-800 tabular-nums text-xs",
+                    "w-[24px] min-w-[24px] p-1 text-center border-r border-slate-200/50 dark:border-slate-800 tabular-nums text-xs",
                     stat.completedCount > 0
                       ? "text-emerald-600 dark:text-emerald-400 font-semibold"
                       : "text-slate-400 dark:text-slate-600"
@@ -818,7 +803,7 @@ export default function HabitGrid({
                   <td
                     key={stat.day}
                     className={cn(
-                      "w-[34px] min-w-[34px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 text-[11px] tabular-nums font-semibold",
+                      "w-[24px] min-w-[24px] p-1 text-center border-r border-slate-100 dark:border-slate-800/60 text-[11px] tabular-nums font-semibold",
                       isMet
                         ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/40"
                         : isBelowGoal
@@ -860,8 +845,8 @@ export default function HabitGrid({
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
         <GreensLegend />
         <span className="flex items-center gap-1.5">
-          <Dumbbell className="h-3 w-3" />
-          Workout / <Moon className="h-3 w-3" /> Rest (rest counts as done)
+          <span className="h-2.5 w-2.5 rounded-[2px] bg-[#8c959f] dark:bg-[#6e7681]" />
+          Rest day (counts as done)
         </span>
         <span>Calories &gt;{calorieTargetFor(todayStr)} kcal and protein &ge;80g tick themselves</span>
         <span>Leads and cold calls fill in from the day's counts</span>
@@ -883,7 +868,7 @@ function GreensLegend() {
     <span className="flex items-center gap-1.5" aria-label="Less to more">
       Less
       {[0, 1, 2, 3].map((l) => (
-        <span key={l} className="h-3 w-3 rounded-[3px]" style={levelSquareStyle(l, isDark)} />
+        <span key={l} className="h-2.5 w-2.5 rounded-[2px]" style={levelSquareStyle(l, isDark)} />
       ))}
       More
     </span>
