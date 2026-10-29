@@ -239,7 +239,7 @@ export const getMonthData = async (req, res) => {
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${monthPrefix}-${String(day).padStart(2, '0')}`;
         if (!isAutoHabit(habit.name, dateStr)) continue;
-        const level = levelFromCount(counts[day] || 0, kind);
+        const level = levelFromCount(counts[day] || 0, kind, dateStr);
         if (level) logsMap[habitId][day] = level;
         else delete logsMap[habitId][day];
       }

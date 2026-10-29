@@ -29,6 +29,10 @@ export const STREAK_GOAL = STREAK_THRESHOLD;
 export const SCORING_V2_FROM = '2026-10-24';
 export const isV2Date = (dateStr?: string) => !dateStr || dateStr >= SCORING_V2_FROM;
 
+/** First day of the 2026-10-29 revision (new weights, simpler leads/calls and dev levels). */
+export const SCORING_V3_FROM = '2026-10-29';
+export const isV3Date = (dateStr?: string) => !dateStr || dateStr >= SCORING_V3_FROM;
+
 export const LEVEL = { LIGHT: 1, MEDIUM: 2, DARK: 3 } as const;
 export type Level = 1 | 2 | 3;
 /** logsMap values: the level of that day's mark (truthy when marked). */
@@ -38,16 +42,29 @@ export const LEVEL_LABELS: Record<number, string> = { 1: 'Light', 2: 'Medium', 3
 
 export const calorieTargetFor = (dateStr?: string) => (isV2Date(dateStr) ? 2550 : 2400);
 
-export const AUTO_LEVEL_THRESHOLDS = {
+/**
+ * Counts needed per level for the auto-filled habits. 'medium' is omitted from
+ * 2026-10-29: leads and calls are then just light (50%) or dark (100%).
+ */
+export const AUTO_LEVEL_THRESHOLDS_V2 = {
   leads: { medium: 6, dark: 12 },
   calls: { medium: 4, dark: 9 },
 } as const;
+export const AUTO_LEVEL_THRESHOLDS_V3 = {
+  leads: { dark: 5 }, // 1-4 light, 5+ dark
+  calls: { dark: 4 }, // 1-3 light, 4+ dark
+} as const;
+/** Current thresholds. */
+export const AUTO_LEVEL_THRESHOLDS = AUTO_LEVEL_THRESHOLDS_V3;
 
-export function levelFromCount(count: number, kind: 'leads' | 'calls'): number {
-  const t = AUTO_LEVEL_THRESHOLDS[kind];
+export const autoThresholdsFor = (kind: 'leads' | 'calls', dateStr?: string): { medium?: number; dark: number } =>
+  (isV3Date(dateStr) ? AUTO_LEVEL_THRESHOLDS_V3 : AUTO_LEVEL_THRESHOLDS_V2)[kind];
+
+export function levelFromCount(count: number, kind: 'leads' | 'calls', dateStr?: string): number {
+  const t = autoThresholdsFor(kind, dateStr);
   if (!count || count <= 0) return 0;
   if (count >= t.dark) return LEVEL.DARK;
-  if (count >= t.medium) return LEVEL.MEDIUM;
+  if (t.medium !== undefined && count >= t.medium) return LEVEL.MEDIUM;
   return LEVEL.LIGHT;
 }
 
@@ -56,6 +73,8 @@ const LIGHT_DARK: Credit = { 1: 0.5, 3: 1 };
 const MEDIUM_DARK: Credit = { 2: 0.8, 3: 1 };
 const LEADS_CALLS: Credit = { 1: 0.5, 2: 1, 3: 1 };
 const DEV_WORK: Credit = { 1: 0.4, 2: 0.8, 3: 1 };
+const LEADS_CALLS_V3: Credit = { 1: 0.5, 3: 1 };
+const DEV_WORK_V3: Credit = { 2: 0.5, 3: 1 };
 
 export interface ScoringRule {
   id: string;
@@ -67,6 +86,8 @@ export interface ScoringRule {
   slots?: string[][];
   credit?: Credit;
   auto?: boolean;
+  /** Points when both slots are done, keyed 'lowerLevel-higherLevel'. */
+  bothPoints?: Record<string, number>;
 }
 
 export const LEGACY_RULES: ScoringRule[] = [
@@ -116,11 +137,37 @@ export const V2_RULES: ScoringRule[] = [
   { id: 'development', weight: 16, single: 12, slots: [['fyp'], ['project']], credit: DEV_WORK },
 ];
 
-/** Current rules. */
-export const SCORING_RULES = V2_RULES;
-export const rulesFor = (dateStr?: string) => (isV2Date(dateStr) ? V2_RULES : LEGACY_RULES);
+/** Rules from SCORING_V3_FROM (2026-10-29) onward. */
+export const V3_RULES: ScoringRule[] = [
+  { id: 'read_before_sleep', weight: 3, allKeywords: ['read', 'sleep'] },
+  { id: 'five_prayers', weight: 5, keywords: ['prayer'] },
+  { id: 'namaz_dua', weight: 3, keywords: ['namaz', 'dua', 'salah', 'pray'], credit: LIGHT_DARK },
+  { id: 'no_doom_scroll', weight: 2, keywords: ['doom', 'scroll'] },
+  { id: 'no_disrespecting', weight: 3, keywords: ['disrespect'] },
+  { id: 'no_movie_show', weight: 2, keywords: ['movie', 'show', 'series', 'netflix'] },
+  { id: 'sleep_on_time', weight: 3, keywords: ['sleep', 'bedtime'] },
+  { id: 'wake_up', weight: 2, keywords: ['wake'] },
+  { id: 'workout', weight: 10, keywords: ['workout', 'gym', 'training', 'exercise'] },
+  { id: 'morning_shower', weight: 2, keywords: ['shower'], credit: LIGHT_DARK },
+  { id: 'brush_teeth', weight: 2, keywords: ['brush', 'teeth', 'tooth'] },
+  { id: 'book_reading', weight: 5, keywords: ['book', 'read'] },
+  { id: 'learning_videos', weight: 3, keywords: ['learning', 'video', 'course', 'tutorial'] },
+  { id: 'journaling', weight: 3, keywords: ['journal'] },
+  { id: 'writing_goals', weight: 3, keywords: ['dream', 'goal'] },
+  { id: 'calories_surplus', weight: 5, keywords: ['calorie'] },
+  { id: 'protein_amount', weight: 3, keywords: ['protein'] },
+  { id: 'leads_calls', weight: 15, single: 10, slots: [['coldcall', 'coldcalling', 'call'], ['lead']], credit: LEADS_CALLS_V3, auto: true, bothPoints: { '1-1': 7, '1-3': 12, '3-3': 15 } },
+  { id: 'linkedin', weight: 7, keywords: ['linkedin'], credit: LIGHT_DARK },
+  { id: 'job_scholarship', weight: 3, keywords: ['job', 'scholarship'], credit: MEDIUM_DARK },
+  { id: 'development', weight: 16, single: 12, slots: [['fyp'], ['project']], credit: DEV_WORK_V3, bothPoints: { '2-2': 8, '2-3': 12, '3-3': 16 } },
+];
 
-export const MAX_DAILY_SCORE = V2_RULES.reduce((total, rule) => total + rule.weight, 0);
+/** Current rules. */
+export const SCORING_RULES = V3_RULES;
+export const rulesFor = (dateStr?: string) =>
+  isV3Date(dateStr) ? V3_RULES : isV2Date(dateStr) ? V2_RULES : LEGACY_RULES;
+
+export const MAX_DAILY_SCORE = V3_RULES.reduce((total, rule) => total + rule.weight, 0);
 
 const SUFFIXES = ['s', 'es', 'ing', 'ed'];
 
@@ -208,17 +255,23 @@ export function calculateDailyHabitScore(
     if (!assigned || assigned.length === 0 || rule.weight === 0) continue;
 
     if (rule.slots) {
-      const slotCredits = rule.slots.map((keywords) =>
+      // Best mark per slot (highest credit), keeping its level for bothPoints.
+      const slotBest = rule.slots.map((keywords) =>
         assigned
           .filter((e) => matchesKeywords(tokenizeHabitName(e.name), keywords))
-          .reduce((best, e) => Math.max(best, creditOf(rule, e.level)), 0)
+          .reduce((best, e) => {
+            const credit = creditOf(rule, e.level);
+            return credit > best.credit ? { credit, level: e.level } : best;
+          }, { credit: 0, level: 0 })
       );
-      const covered = slotCredits.filter((c) => c > 0);
+      const coveredSlots = slotBest.filter((b) => b.credit > 0);
+      const covered = coveredSlots.map((b) => b.credit);
+      const bothKey = coveredSlots.map((b) => b.level).sort((x, y) => x - y).join('-');
       if (!v2) {
         if (covered.length === rule.slots.length) score += rule.weight;
         else if (rule.partial !== undefined && covered.length >= 1) score += rule.partial;
       } else if (covered.length === rule.slots.length) {
-        score += roundPoints(rule.weight * (covered.reduce((a, b) => a + b, 0) / covered.length));
+        score += rule.bothPoints?.[bothKey] ?? roundPoints(rule.weight * (covered.reduce((a, b) => a + b, 0) / covered.length));
       } else if (covered.length === 1) {
         score += roundPoints((rule.single ?? rule.weight) * covered[0]);
       }

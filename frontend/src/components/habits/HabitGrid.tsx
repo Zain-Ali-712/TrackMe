@@ -4,7 +4,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { cn, getHabitIcon } from '@/lib/utils';
 import {
   STREAK_THRESHOLD, getHabitWeight, isPartnerFulfilledHabit, levelOptionsFor, isAutoHabit,
-  autoKindFor, pointsForLevel, calorieTargetFor, isV2Date, LEVEL_LABELS, AUTO_LEVEL_THRESHOLDS, type LogsMap,
+  autoKindFor, pointsForLevel, calorieTargetFor, isV2Date, LEVEL_LABELS, autoThresholdsFor, type LogsMap,
 } from '@/lib/habitScoring';
 import { useIsDark } from '@/lib/chartTheme';
 import toast from 'react-hot-toast';
@@ -90,13 +90,16 @@ function LevelCell({
   // Auto-filled from the day's leads / calls: shown, never clicked.
   if (auto) {
     const unit = auto.kind === 'leads' ? 'lead' : 'call';
-    const t = AUTO_LEVEL_THRESHOLDS[auto.kind];
+    const t = autoThresholdsFor(auto.kind, dateStr);
+    const scale = t.medium !== undefined
+      ? `1-${t.medium - 1} light, ${t.medium}-${t.dark - 1} medium, ${t.dark}+ dark`
+      : `1-${t.dark - 1} light, ${t.dark}+ dark`;
     return (
       <td className={tdClassName}>
         <div
           className={SQUARE}
           style={style}
-          title={`${auto.count} ${unit}${auto.count === 1 ? '' : 's'} on day ${day}${level ? `: ${LEVEL_LABELS[level]} (+${pointsText(level)})` : ''}. Fills in automatically: 1-${t.medium - 1} light, ${t.medium}-${t.dark - 1} medium, ${t.dark}+ dark.`}
+          title={`${auto.count} ${unit}${auto.count === 1 ? '' : 's'} on day ${day}${level ? `: ${LEVEL_LABELS[level]} (+${pointsText(level)})` : ''}. Fills in automatically: ${scale}.`}
         />
       </td>
     );
