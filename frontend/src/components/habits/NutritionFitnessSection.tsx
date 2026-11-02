@@ -3,7 +3,7 @@ import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Dumbbell, Moon, ShieldCheck, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChartTheme, ChartTooltipCard } from '@/lib/chartTheme';
-import { calorieTargetFor } from '@/lib/habitScoring';
+import { calorieTargetFor, isBreakDay } from '@/lib/habitScoring';
 
 // Current target (2550 from 2026-10-24); past days are judged by their own target.
 const CALORIE_TARGET = calorieTargetFor();
@@ -40,10 +40,15 @@ export default function NutritionFitnessSection({
   const workoutSourceData = monthData.length > 0 ? monthData : data;
 
   // Compute stats for Workout & Rest Days (Strictly for the current month)
-  const totalMonthDays = workoutSourceData.length || 1;
-  const workoutDaysCount = workoutSourceData.filter(d => d.workoutStatus === 'workout').length;
-  const restDaysCount = workoutSourceData.filter(d => d.workoutStatus === 'rest').length;
-  const skippedDaysCount = workoutSourceData.filter(d => !d.workoutStatus || d.workoutStatus === 'none').length;
+  // Only days that have started count; break Sundays never do. A day is
+  // "skipped" once it is over and has no workout or rest marked.
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const trackedDays = workoutSourceData.filter(d => d.date <= todayStr && !isBreakDay(d.date));
+  const totalMonthDays = trackedDays.length || 1;
+  const workoutDaysCount = trackedDays.filter(d => d.workoutStatus === 'workout').length;
+  const restDaysCount = trackedDays.filter(d => d.workoutStatus === 'rest').length;
+  const skippedDaysCount = trackedDays.filter(d => d.date < todayStr && (!d.workoutStatus || d.workoutStatus === 'none')).length;
   const activeStreakAdherence = totalMonthDays > 0 
     ? Math.round(((workoutDaysCount + restDaysCount) / totalMonthDays) * 100) 
     : 0;
@@ -212,10 +217,12 @@ export default function NutritionFitnessSection({
 
           {/* Monthly Visual Table / Row Cards (in descending order: latest day first) */}
           <div className="space-y-1.5 max-h-[185px] overflow-y-auto scrollbar-thin pr-0.5">
-            {workoutSourceData.slice().reverse().map((dayData) => {
+            {trackedDays.slice().reverse().map((dayData) => {
               const isWorkout = dayData.workoutStatus === 'workout';
               const isRest = dayData.workoutStatus === 'rest';
-              const isSkipped = !dayData.workoutStatus || dayData.workoutStatus === 'none';
+              const isOpen = !dayData.workoutStatus || dayData.workoutStatus === 'none';
+              const isSkipped = isOpen && dayData.date < todayStr;
+              const isPending = isOpen && dayData.date === todayStr;
 
               return (
                 <div 
@@ -246,6 +253,12 @@ export default function NutritionFitnessSection({
                     {isRest && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
                         <Moon className="h-3 w-3" /> Rest Day
+                      </span>
+                    )}
+
+                    {isPending && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                        Today, not marked yet
                       </span>
                     )}
 

@@ -353,8 +353,8 @@ function StreakDays({
       {days.map((d) => {
         const met = d.score >= STREAK_THRESHOLD;
         const isToday = d.day === todayDay;
-        const exempt = !met && (d.isExempt || d.isSunday);
-        const status = met ? 'target hit' : exempt ? 'exempt' : isToday ? 'in progress' : 'missed';
+        const exempt = !met && (d.isExempt || d.isBreak);
+        const status = d.isBreak ? 'break day' : met ? 'target hit' : exempt ? 'exempt' : isToday ? 'in progress' : 'missed';
         const hint = `${d.weekday} ${d.day}: ${d.score}%, ${status}`;
         return (
           <button

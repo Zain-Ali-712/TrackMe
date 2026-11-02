@@ -7,7 +7,10 @@ const habitSchema = new mongoose.Schema(
     color: { type: String, default: '#10b981' },
     targetDaysPerWeek: { type: Number, default: 7 },
     order: { type: Number, default: 0 },
-    archived: { type: Boolean, default: false }
+    archived: { type: Boolean, default: false },
+    // Last used the day before this date ("YYYY-MM-DD"). Kept, not deleted, so
+    // its marks still count on the days it was part of the routine.
+    retiredFrom: { type: String }
   },
   { timestamps: true }
 );

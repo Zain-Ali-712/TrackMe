@@ -83,7 +83,8 @@ export default function HabitsPage() {
     habitId: string,
     day: number,
     dateStr: string,
-    level: number
+    level: number,
+    value?: number
   ) => {
     if (!data) return;
 
@@ -114,7 +115,8 @@ export default function HabitsPage() {
       updatedLogsMap,
       data.daysInMonth,
       selectedYear,
-      selectedMonth
+      selectedMonth,
+      data.goalsByDay
     );
 
     const updatedDailyStats = data.dailyStats.map((ds: any) => {
@@ -128,14 +130,17 @@ export default function HabitsPage() {
         percent: possible > 0 ? Math.round((newCount / possible) * 100) : 0,
         score,
         isBelowGoal: score < STREAK_THRESHOLD,
-        isExempt: match ? match.isExempt : false,
+        // Exemptions come from the all-time streak on the server.
+        isExempt: ds.isExempt,
         isSunday: match ? match.isSunday : false
       };
     });
 
     const isCurrentMonth = data.overallStats.isCurrentMonth;
     const todayDay = data.overallStats.todayDay;
-    const newStreak = computeStreakCount(updatedDailyStats, isCurrentMonth, todayDay || 1, selectedYear, selectedMonth);
+    // The streak runs across months: past days are settled on the server, today can only add to it.
+    const todayStat = isCurrentMonth ? updatedDailyStats.find((d: any) => d.day === todayDay) : null;
+    const newStreak = (data.streakThroughYesterday ?? 0) + (todayStat && !todayStat.isBreak && todayStat.score >= STREAK_THRESHOLD ? 1 : 0);
     const todayMatch = updatedDailyStats.find((d: any) => d.day === todayDay);
     const newTodayScore = todayMatch ? todayMatch.score : 0;
 
@@ -169,7 +174,9 @@ export default function HabitsPage() {
     });
 
     try {
-      await toggleHabitLog(habitId, dateStr, willBeChecked, willBeChecked ? level : undefined);
+      await toggleHabitLog(habitId, dateStr, willBeChecked, willBeChecked ? level : undefined, value);
+      // Editing yesterday can move the all-time streak; refresh quietly to settle it.
+      if (!isCurrentMonth || day !== todayDay) loadMonthData(selectedYear, selectedMonth);
     } catch (error: any) {
       setData(previousData);
       toast.error(error?.message || 'Failed to sync habit status');
@@ -541,6 +548,8 @@ export default function HabitsPage() {
               eachHabitStats={data.eachHabitStats}
               dailyStats={data.dailyStats}
               dailyLeadActivity={data.dailyLeadActivity}
+              goalsByDay={data.goalsByDay}
+              valuesMap={data.valuesMap}
               latestEditableDate={data.latestEditableDate}
               onSetHabitLevel={handleSetHabitLevel}
               onUpdateSleep={handleUpdateSleep}

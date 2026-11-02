@@ -130,8 +130,35 @@ export const updateHabit = (id: string, data: any) => fetchAPI(`/habits/${id}`, 
 export const deleteHabit = (id: string) => fetchAPI(`/habits/${id}`, { method: 'DELETE' });
 export const fetchMonthHabitData = (year: number, month: number) => fetchAPI(`/habits/month?year=${year}&month=${month}`);
 /** Mark (or clear) a habit for a day. `level` is 1 light, 2 medium, 3 dark. */
-export const toggleHabitLog = (habitId: string, date: string, completed: boolean, level?: number) =>
-  fetchAPI('/habits/toggle', { method: 'POST', body: JSON.stringify({ habitId, date, completed, level }) });
+export const toggleHabitLog = (habitId: string, date: string, completed: boolean, level?: number, value?: number) =>
+  fetchAPI('/habits/toggle', { method: 'POST', body: JSON.stringify({ habitId, date, completed, level, value }) });
+
+// Goals
+export const fetchDailyGoals = (from?: string, to?: string) => {
+  const params = new URLSearchParams();
+  if (from) params.append('from', from);
+  if (to) params.append('to', to);
+  const qs = params.toString();
+  return fetchAPI(`/goals/daily${qs ? `?${qs}` : ''}`);
+};
+export const createDailyGoal = (data: { date: string; text: string; time?: string; location?: string }) =>
+  fetchAPI('/goals/daily', { method: 'POST', body: JSON.stringify(data) });
+export const updateDailyGoal = (id: string, data: any) =>
+  fetchAPI(`/goals/daily/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteDailyGoal = (id: string) => fetchAPI(`/goals/daily/${id}`, { method: 'DELETE' });
+
+export const fetchMonthlyGoals = (count = 6) => fetchAPI(`/goals/monthly?count=${count}`);
+export const createMonthlyGoal = (data: { month: string; text: string }) =>
+  fetchAPI('/goals/monthly', { method: 'POST', body: JSON.stringify(data) });
+export const updateMonthlyGoal = (id: string, data: any) =>
+  fetchAPI(`/goals/monthly/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteMonthlyGoal = (id: string) => fetchAPI(`/goals/monthly/${id}`, { method: 'DELETE' });
+
+export const fetchDreams = () => fetchAPI('/goals/dreams');
+export const createDream = (data: any) => fetchAPI('/goals/dreams', { method: 'POST', body: JSON.stringify(data) });
+export const updateDream = (id: string, data: any) =>
+  fetchAPI(`/goals/dreams/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteDream = (id: string) => fetchAPI(`/goals/dreams/${id}`, { method: 'DELETE' });
 export const updateDailyMetric = (data: {
   date: string;
   sleepHours?: number;

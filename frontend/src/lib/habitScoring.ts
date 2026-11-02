@@ -33,6 +33,29 @@ export const isV2Date = (dateStr?: string) => !dateStr || dateStr >= SCORING_V2_
 export const SCORING_V3_FROM = '2026-10-29';
 export const isV3Date = (dateStr?: string) => !dateStr || dateStr >= SCORING_V3_FROM;
 
+/** First day of the 2026-11-02 revision (goals habits, merged LinkedIn/Job, Project only). */
+export const SCORING_V4_FROM = '2026-11-02';
+export const isV4Date = (dateStr?: string) => !dateStr || String(dateStr) >= SCORING_V4_FROM;
+
+/**
+ * Break Sundays: every other Sunday from 2026-11-15 is a day off. Nothing can be
+ * marked, it scores nothing, and it never counts for or against the streak.
+ */
+export const FIRST_BREAK_SUNDAY = '2026-11-15';
+const dayNumberUTC = (dateStr?: string) => {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / 86400000);
+};
+export function isBreakDay(dateStr?: string) {
+  if (!dateStr || String(dateStr) < FIRST_BREAK_SUNDAY) return false;
+  const diff = dayNumberUTC(dateStr) - dayNumberUTC(FIRST_BREAK_SUNDAY);
+  return diff % 14 === 0;
+}
+
+/** LinkedIn / Job: 0 jobs applied = medium (3%), 1+ = dark (5%). */
+export const levelForJobs = (count: number) => (Number(count) >= 1 ? LEVEL.DARK : LEVEL.MEDIUM) as number;
+
+
 export const LEVEL = { LIGHT: 1, MEDIUM: 2, DARK: 3 } as const;
 export type Level = 1 | 2 | 3;
 /** logsMap values: the level of that day's mark (truthy when marked). */
@@ -40,7 +63,8 @@ export type LogsMap = Record<string, Record<number, number | boolean>>;
 
 export const LEVEL_LABELS: Record<number, string> = { 1: 'Light', 2: 'Medium', 3: 'Dark' };
 
-export const calorieTargetFor = (dateStr?: string) => (isV2Date(dateStr) ? 2550 : 2400);
+/** Calorie surplus threshold: a day counts when calories exceed it. */
+export const calorieTargetFor = (dateStr?: string) => (isV4Date(dateStr) ? 2499 : isV2Date(dateStr) ? 2550 : 2400);
 
 /**
  * Counts needed per level for the auto-filled habits. 'medium' is omitted from
@@ -75,6 +99,8 @@ const LEADS_CALLS: Credit = { 1: 0.5, 2: 1, 3: 1 };
 const DEV_WORK: Credit = { 1: 0.4, 2: 0.8, 3: 1 };
 const LEADS_CALLS_V3: Credit = { 1: 0.5, 3: 1 };
 const DEV_WORK_V3: Credit = { 2: 0.5, 3: 1 };
+const LINKEDIN_JOB: Credit = { 2: 0.6, 3: 1 };
+const PROJECT_V4: Credit = { 2: 2 / 3, 3: 1 };
 
 export interface ScoringRule {
   id: string;
@@ -88,9 +114,14 @@ export interface ScoringRule {
   auto?: boolean;
   /** Points when both slots are done, keyed 'lowerLevel-higherLevel'. */
   bothPoints?: Record<string, number>;
+  /** Points scale with the share of daily goals met. */
+  ratio?: boolean;
+  /** Asks for a count when marked (jobs applied). */
+  counted?: boolean;
 }
 
 export const LEGACY_RULES: ScoringRule[] = [
+  { id: 'meeting_goals', weight: 0, allKeywords: ['meet', 'goal'] },
   { id: 'read_before_sleep', weight: 0, allKeywords: ['read', 'sleep'] },
   { id: 'five_prayers', weight: 5, keywords: ['prayer'] },
   { id: 'namaz_dua', weight: 3, keywords: ['namaz', 'dua', 'salah', 'pray'] },
@@ -114,6 +145,7 @@ export const LEGACY_RULES: ScoringRule[] = [
 ];
 
 export const V2_RULES: ScoringRule[] = [
+  { id: 'meeting_goals', weight: 0, allKeywords: ['meet', 'goal'] },
   { id: 'read_before_sleep', weight: 2, allKeywords: ['read', 'sleep'] },
   { id: 'five_prayers', weight: 5, keywords: ['prayer'] },
   { id: 'namaz_dua', weight: 3, keywords: ['namaz', 'dua', 'salah', 'pray'], credit: LIGHT_DARK },
@@ -139,6 +171,7 @@ export const V2_RULES: ScoringRule[] = [
 
 /** Rules from SCORING_V3_FROM (2026-10-29) onward. */
 export const V3_RULES: ScoringRule[] = [
+  { id: 'meeting_goals', weight: 0, allKeywords: ['meet', 'goal'] },
   { id: 'read_before_sleep', weight: 3, allKeywords: ['read', 'sleep'] },
   { id: 'five_prayers', weight: 5, keywords: ['prayer'] },
   { id: 'namaz_dua', weight: 3, keywords: ['namaz', 'dua', 'salah', 'pray'], credit: LIGHT_DARK },
@@ -162,12 +195,42 @@ export const V3_RULES: ScoringRule[] = [
   { id: 'development', weight: 16, single: 12, slots: [['fyp'], ['project']], credit: DEV_WORK_V3, bothPoints: { '2-2': 8, '2-3': 12, '3-3': 16 } },
 ];
 
-/** Current rules. */
-export const SCORING_RULES = V3_RULES;
-export const rulesFor = (dateStr?: string) =>
-  isV3Date(dateStr) ? V3_RULES : isV2Date(dateStr) ? V2_RULES : LEGACY_RULES;
+/** Rules from SCORING_V4_FROM (2026-11-02) onward. Weights sum to 100. */
+export const V4_RULES: ScoringRule[] = [
+  // Share of today's daily goals that were met, filled in from the Goals page.
+  { id: 'meeting_goals',       weight: 4,  allKeywords: ['meet', 'goal'], ratio: true, auto: true },
+  { id: 'read_before_sleep',   weight: 2,  allKeywords: ['read', 'sleep'] },
+  { id: 'five_prayers',        weight: 5,  keywords: ['prayer'] },
+  { id: 'namaz_dua',           weight: 3,  keywords: ['namaz', 'dua', 'salah', 'pray'], credit: LIGHT_DARK },
+  { id: 'no_doom_scroll',      weight: 2,  keywords: ['doom', 'scroll'] },
+  { id: 'no_disrespecting',    weight: 3,  keywords: ['disrespect'] },
+  { id: 'no_movie_show',       weight: 2,  keywords: ['movie', 'show', 'series', 'netflix'] },
+  { id: 'sleep_on_time',       weight: 3,  keywords: ['sleep', 'bedtime'] },
+  { id: 'wake_up',             weight: 2,  keywords: ['wake'] },
+  { id: 'workout',             weight: 10, keywords: ['workout', 'gym', 'training', 'exercise'] },
+  { id: 'morning_shower',      weight: 2,  keywords: ['shower'], credit: LIGHT_DARK },
+  { id: 'brush_teeth',         weight: 2,  keywords: ['brush', 'teeth', 'tooth'] },
+  { id: 'book_reading',        weight: 5,  keywords: ['book', 'read'] },
+  { id: 'learning_videos',     weight: 3,  keywords: ['learning', 'video', 'course', 'tutorial'] },
+  { id: 'journaling',          weight: 3,  keywords: ['journal'] },
+  // Ticked automatically when at least one daily goal is written for the day.
+  { id: 'writing_goals',       weight: 1,  keywords: ['dream', 'goal'], auto: true },
+  { id: 'calories_surplus',    weight: 5,  keywords: ['calorie'] },
+  { id: 'protein_amount',      weight: 3,  keywords: ['protein'] },
+  // Calls also tick leads (at the calls' level); leads alone never tick calls.
+  { id: 'cold_calls',          weight: 10, keywords: ['coldcall', 'coldcalling', 'call'], credit: LIGHT_DARK, auto: true },
+  { id: 'lead_generation',     weight: 5,  keywords: ['lead'], credit: LIGHT_DARK, auto: true },
+  { id: 'linkedin_job',        weight: 5,  keywords: ['linkedin'], credit: LINKEDIN_JOB, counted: true },
+  { id: 'personal_brand',      weight: 5,  keywords: ['brand'] },
+  { id: 'project_dev',         weight: 15, keywords: ['project'], credit: PROJECT_V4 }
+];
 
-export const MAX_DAILY_SCORE = V3_RULES.reduce((total, rule) => total + rule.weight, 0);
+/** Current rules. */
+export const SCORING_RULES = V4_RULES;
+export const rulesFor = (dateStr?: string) =>
+  isV4Date(dateStr) ? V4_RULES : isV3Date(dateStr) ? V3_RULES : isV2Date(dateStr) ? V2_RULES : LEGACY_RULES;
+
+export const MAX_DAILY_SCORE = V4_RULES.reduce((total, rule) => total + rule.weight, 0);
 
 const SUFFIXES = ['s', 'es', 'ing', 'ed'];
 
@@ -204,8 +267,15 @@ export function levelOptionsFor(name: string, dateStr?: string): number[] {
 
 export const isAutoHabit = (name: string, dateStr?: string) => Boolean(isV2Date(dateStr) && ruleForHabit(name, dateStr)?.auto);
 
-export function autoKindFor(name: string): 'leads' | 'calls' | null {
+/** Habits that ask for a number when marked (LinkedIn / Job: jobs applied). */
+export const isCountedHabit = (name: string, dateStr?: string) => Boolean(ruleForHabit(name, dateStr)?.counted);
+
+export type AutoKind = 'leads' | 'calls' | 'goals_written' | 'goals_met';
+
+export function autoKindFor(name: string): AutoKind | null {
   const tokens = tokenizeHabitName(name);
+  if (matchesKeywords(tokens, ['meet']) && matchesKeywords(tokens, ['goal'])) return 'goals_met';
+  if (matchesKeywords(tokens, ['dream', 'goal'])) return 'goals_written';
   if (matchesKeywords(tokens, ['lead'])) return 'leads';
   if (matchesKeywords(tokens, ['coldcall', 'coldcalling', 'call'])) return 'calls';
   return null;
@@ -231,14 +301,17 @@ const roundPoints = (value: number) => Math.round(value + 1e-9);
 
 /** Score one day. A plain name (or a mark without a level) counts as dark. */
 export function calculateDailyHabitScore(
-  checked: Array<string | { name: string; level?: number }>,
+  checked: Array<string | { name: string; level?: number; ratio?: number }>,
   dateStr?: string
 ): number {
   const v2 = isV2Date(dateStr);
   const rules = rulesFor(dateStr);
   const entries = (checked || []).map((item) =>
-    typeof item === 'string' ? { name: item, level: LEVEL.DARK as number } : { name: item.name, level: item.level || LEVEL.DARK }
+    typeof item === 'string'
+      ? { name: item, level: LEVEL.DARK as number, ratio: undefined as number | undefined }
+      : { name: item.name, level: item.level || LEVEL.DARK, ratio: item.ratio }
   );
+  if (isBreakDay(dateStr)) return 0;
   const creditOf = (rule: ScoringRule, level: number) => (v2 && rule.credit ? rule.credit[level] ?? 0 : 1);
 
   const byRule = new Map<string, typeof entries>();
@@ -275,6 +348,9 @@ export function calculateDailyHabitScore(
       } else if (covered.length === 1) {
         score += roundPoints((rule.single ?? rule.weight) * covered[0]);
       }
+    } else if (rule.ratio) {
+      const best = assigned.reduce((b, e) => Math.max(b, e.ratio ?? creditOf(rule, e.level)), 0);
+      score += roundPoints(rule.weight * Math.max(0, Math.min(1, best)));
     } else {
       const best = assigned.reduce((b, e) => Math.max(b, creditOf(rule, e.level)), 0);
       score += v2 ? roundPoints(rule.weight * best) : rule.weight;
@@ -379,8 +455,9 @@ export function computeAllDailyScores(
   logsMap: LogsMap,
   daysInMonth: number,
   year: number,
-  month: number
-): Array<{ day: number; date: string; weekday: string; isSunday: boolean; score: number; completedCount: number; isBelowGoal: boolean; isExempt: boolean }> {
+  month: number,
+  goalsByDay: Record<number, { total: number; done: number }> = {}
+): Array<{ day: number; date: string; weekday: string; isSunday: boolean; isBreak: boolean; score: number; completedCount: number; isBelowGoal: boolean; isExempt: boolean }> {
   const weekdaysShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   const draftResults = [];
 
@@ -388,21 +465,26 @@ export function computeAllDailyScores(
     const dayDate = new Date(year, month - 1, day);
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    const checked: Array<{ name: string; level: number }> = [];
+    const goals = goalsByDay[day];
+    const checked: Array<{ name: string; level: number; ratio?: number }> = [];
     habits.forEach((habit) => {
       const value = logsMap[habit._id.toString()]?.[day];
-      if (value) checked.push({ name: habit.name, level: typeof value === 'number' ? value : LEVEL.DARK });
+      if (!value) return;
+      const ratio = autoKindFor(habit.name) === 'goals_met' && goals?.total ? goals.done / goals.total : undefined;
+      checked.push({ name: habit.name, level: typeof value === 'number' ? value : LEVEL.DARK, ratio });
     });
 
-    const score = calculateDailyHabitScore(checked, dateStr);
+    const isBreak = isBreakDay(dateStr);
+    const score = isBreak ? 0 : calculateDailyHabitScore(checked, dateStr);
     draftResults.push({
       day,
       date: dateStr,
       weekday: weekdaysShort[dayDate.getDay()],
       isSunday: dayDate.getDay() === 0,
+      isBreak,
       score,
       completedCount: checked.length,
-      isBelowGoal: score < STREAK_THRESHOLD
+      isBelowGoal: !isBreak && score < STREAK_THRESHOLD
     });
   }
 
@@ -528,4 +610,46 @@ export function computeMajorHabitsStats(
       percent: totalTarget > 0 ? Math.min(100, Math.round((completedChecks / totalTarget) * 100)) : 0
     };
   });
+}
+
+
+/**
+ * One streak across the whole history, not reset by month boundaries.
+ *
+ * @param {Array<{date: string, score: number, isBreak?: boolean}>} days every
+ *   tracked day in date order, up to and including today
+ * @param {string} todayStr "YYYY-MM-DD"
+ * Weeks run Monday-Sunday; in each week the single weakest finished day below
+ * 80% is exempt (does not break the streak). Break days are skipped entirely.
+ * Today only ever adds to the streak, it never breaks it.
+ */
+export function computeContinuousStreak(
+  days: Array<{ date: string; score: number; isBreak?: boolean }>,
+  todayStr: string
+): { streak: number; throughYesterday: number; exemptDates: Set<string> } {
+  const past = days.filter((d) => d.date < todayStr && !d.isBreak);
+  const weekKey = (dateStr: string) => {
+    const n = dayNumberUTC(dateStr);
+    // 1970-01-05 (day 4) was a Monday
+    return Math.floor((n - 4) / 7);
+  };
+  const exemptDates = new Set<string>();
+  const byWeek = new Map<number, { date: string; score: number }>();
+  for (const d of past) {
+    if (d.score >= STREAK_THRESHOLD) continue;
+    const key = weekKey(d.date);
+    const current = byWeek.get(key);
+    if (!current || d.score < current.score) byWeek.set(key, d);
+  }
+  for (const d of byWeek.values()) exemptDates.add(d.date);
+
+  let streak = 0;
+  for (const d of past) {
+    if (d.score >= STREAK_THRESHOLD) streak++;
+    else if (!exemptDates.has(d.date)) streak = 0;
+  }
+  const throughYesterday = streak;
+  const today = days.find((d) => d.date === todayStr);
+  if (today && !today.isBreak && today.score >= STREAK_THRESHOLD) streak++;
+  return { streak, throughYesterday, exemptDates };
 }

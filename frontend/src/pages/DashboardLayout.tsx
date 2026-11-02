@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarCheck, Sun, Moon, Menu, X, Layers, CheckSquare, BarChart2, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarCheck, Sun, Moon, Menu, X, Layers, CheckSquare, BarChart2, ChevronLeft, ChevronRight, LogOut, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LeadFormDialog from '@/components/leads/LeadFormDialog';
 import { createLead } from '@/lib/api';
@@ -55,6 +55,7 @@ export default function DashboardLayout() {
     if (location.pathname.includes('/leads')) return { title: 'Leads', subtitle: 'Your pipeline, by niche and status' };
     if (location.pathname.includes('/appointments')) return { title: 'Appointments', subtitle: 'Booked calls and meetings' };
     if (location.pathname.includes('/habits')) return { title: 'Habits', subtitle: 'Daily routine and monthly score' };
+    if (location.pathname.includes('/goals')) return { title: 'Goals', subtitle: 'Today, this month, and the next five years' };
     return { title: 'Dashboard', subtitle: 'Today at a glance' };
   };
 
@@ -75,6 +76,7 @@ export default function DashboardLayout() {
     { to: '/dashboard/lead-stats', label: 'Analytics', icon: BarChart2 },
     { to: '/dashboard/appointments', label: 'Appointments', icon: CalendarCheck },
     { to: '/dashboard/habits', label: 'Habits', icon: CheckSquare },
+    { to: '/dashboard/goals', label: 'Goals', icon: Target },
   ];
 
   const pageInfo = getPageInfo();

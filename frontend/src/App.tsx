@@ -11,6 +11,7 @@ const LeadsPage = lazy(() => import('@/pages/LeadsPage'));
 const AppointmentsPage = lazy(() => import('@/pages/AppointmentsPage'));
 const HabitsPage = lazy(() => import('@/pages/HabitsPage'));
 const LeadStatsPage = lazy(() => import('@/pages/LeadStatsPage'));
+const GoalsPage = lazy(() => import('@/pages/GoalsPage'));
 
 function FullPageSpinner() {
   return (
@@ -57,6 +58,7 @@ function AppRoutes() {
           <Route path="lead-stats" element={<LeadStatsPage />} />
           <Route path="appointments" element={<AppointmentsPage />} />
           <Route path="habits" element={<HabitsPage />} />
+          <Route path="goals" element={<GoalsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

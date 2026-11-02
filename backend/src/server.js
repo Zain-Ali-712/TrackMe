@@ -12,6 +12,7 @@ import leadRoutes from './routes/lead.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
 import habitRoutes from './routes/habit.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import goalsRoutes from './routes/goals.routes.js';
 
 dotenv.config();
 
@@ -48,6 +49,8 @@ app.use(cors({
   credentials: true
 }));
 
+// 5-year goals carry a resized photo; every other route keeps the small limit.
+app.use('/api/goals/dreams', express.json({ limit: '4mb' }));
 app.use(express.json({ limit: '100kb' }));
 
 if (process.env.NODE_ENV !== 'production') {
@@ -70,6 +73,7 @@ app.use('/api/niches', nicheRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/habits', habitRoutes);
+app.use('/api/goals', goalsRoutes);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ message: 'Not found' });
