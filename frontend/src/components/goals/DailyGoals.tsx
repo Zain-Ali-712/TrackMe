@@ -204,13 +204,7 @@ export default function DailyGoals() {
                   className="h-9 text-[13px]"
                   maxLength={500}
                 />
-                <Input
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  aria-label="Time"
-                  className="h-9 w-full sm:w-[118px] text-[13px]"
-                />
+                <TimePicker value={time} onChange={setTime} />
                 <select
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
@@ -389,3 +383,48 @@ function Stat({ icon: Icon, label, value, hint }: { icon: React.ElementType; lab
     </div>
   );
 }
+
+const SELECT_CLASSES =
+  'h-9 rounded-lg border border-input bg-white dark:bg-slate-900 px-2.5 text-[13px] text-slate-700 dark:text-slate-200 outline-none focus:border-clay-500/70 focus:ring-[3px] focus:ring-clay-500/15';
+
+// 5 AM through 11 PM, then midnight to 4 AM for late nights.
+const HOURS = [...Array.from({ length: 19 }, (_, i) => i + 5), 0, 1, 2, 3, 4];
+const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}`;
+
+/** Pick an hour, then :00 or :30. Stores "HH:MM" (24-hour). */
+function TimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [h, m] = value ? value.split(':') : ['', ''];
+  const setHour = (hour: string) => onChange(hour === '' ? '' : `${hour.padStart(2, '0')}:${m || '00'}`);
+  const setMinute = (minute: string) => h && onChange(`${h}:${minute}`);
+
+  return (
+    <div className="flex items-center gap-1">
+      <select value={h ? String(Number(h)) : ''} onChange={(e) => setHour(e.target.value)} aria-label="Hour" className={cn(SELECT_CLASSES, 'w-full sm:w-[92px]')}>
+        <option value="">Time</option>
+        {HOURS.map((hour) => (
+          <option key={hour} value={hour}>{hourLabel(hour)}</option>
+        ))}
+      </select>
+      {h && (
+        <div role="radiogroup" aria-label="Minutes" className="flex h-9 shrink-0 rounded-lg border border-input p-0.5">
+          {['00', '30'].map((minute) => (
+            <button
+              key={minute}
+              type="button"
+              role="radio"
+              aria-checked={m === minute}
+              onClick={() => setMinute(minute)}
+              className={cn(
+                'px-2 rounded-md text-xs font-medium tabular-nums transition-colors',
+                m === minute ? 'bg-clay-600 text-white dark:bg-clay-500 dark:text-slate-950' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100'
+              )}
+            >
+              :{minute}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
