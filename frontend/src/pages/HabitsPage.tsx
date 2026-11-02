@@ -120,8 +120,11 @@ export default function HabitsPage() {
     );
 
     const updatedDailyStats = data.dailyStats.map((ds: any) => {
+      // Only the edited day changes; every other day keeps the server's score
+      // (which also counts habits not shown in this month, like retired ones).
+      if (ds.day !== day) return ds;
       const match = updatedDailyScores.find(s => s.day === ds.day);
-      const newCount = ds.day === day ? Math.max(0, ds.completedCount + delta) : ds.completedCount;
+      const newCount = Math.max(0, ds.completedCount + delta);
       const score = match ? match.score : 0;
       const possible = ds.totalHabits || data.habits.length;
       return {

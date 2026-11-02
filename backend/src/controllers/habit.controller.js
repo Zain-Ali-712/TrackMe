@@ -169,9 +169,10 @@ export const getMonthData = async (req, res) => {
     const habits = await loadHabits();
     const todayStr = toDateString(now);
 
-    // Retired habits stay listed only for months they were still part of.
+    // Retired habits are hidden from the month they retire in onward; earlier
+    // months still list them. Their marks keep counting in every day's score.
     const monthStart = `${monthPrefix}-01`;
-    const visibleHabits = habits.filter((h) => !h.retiredFrom || h.retiredFrom > monthStart);
+    const visibleHabits = habits.filter((h) => !h.retiredFrom || h.retiredFrom > `${monthPrefix}-31`);
 
     const monthRegex = new RegExp(`^${monthPrefix}`);
     const [ctx, metrics] = await Promise.all([
