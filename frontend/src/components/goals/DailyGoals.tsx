@@ -392,7 +392,7 @@ const HOURS = [...Array.from({ length: 19 }, (_, i) => i + 5), 0, 1, 2, 3, 4];
 const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}`;
 
 /** Pick an hour, then :00 or :30. Stores "HH:MM" (24-hour). */
-function TimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function TimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [h, m] = value ? value.split(':') : ['', ''];
   const setHour = (hour: string) => onChange(hour === '' ? '' : `${hour.padStart(2, '0')}:${m || '00'}`);
   const setMinute = (minute: string) => h && onChange(`${h}:${minute}`);

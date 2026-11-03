@@ -15,7 +15,11 @@ import {
   createAchievement,
   updateAchievement,
   deleteAchievement,
-  saveMonthlyJournal
+  saveMonthlyJournal,
+  listPlans,
+  createPlan,
+  updatePlan,
+  deletePlan
 } from '../controllers/goals.controller.js';
 
 const router = express.Router();
@@ -34,6 +38,11 @@ router.post('/achievements', createAchievement);
 router.put('/achievements/:id', updateAchievement);
 router.delete('/achievements/:id', deleteAchievement);
 router.put('/journal/:month', saveMonthlyJournal);
+
+router.get('/plans', listPlans);
+router.post('/plans', createPlan);
+router.put('/plans/:id', updatePlan);
+router.delete('/plans/:id', deletePlan);
 
 router.get('/dreams', listDreams);
 router.post('/dreams', createDream);

@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, CalendarRange, Mountain } from 'lucide-react';
+import { CalendarDays, CalendarRange, Mountain, AlarmClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DailyGoals from '@/components/goals/DailyGoals';
 import MonthlyGoals from '@/components/goals/MonthlyGoals';
 import DreamGoals from '@/components/goals/DreamGoals';
+import UpcomingPlans from '@/components/goals/UpcomingPlans';
 
-type Tab = 'daily' | 'monthly' | 'dreams';
+type Tab = 'plans' | 'daily' | 'monthly' | 'dreams';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: 'plans', label: 'Upcoming Plans', icon: AlarmClock },
   { id: 'daily', label: 'Daily', icon: CalendarDays },
   { id: 'monthly', label: 'Monthly', icon: CalendarRange },
   { id: 'dreams', label: '5 Years', icon: Mountain },
@@ -35,7 +37,7 @@ export default function GoalsPage() {
 
   return (
     <div className="space-y-5 pb-12">
-      <div role="tablist" aria-label="Goal views" className="inline-flex rounded-xl bg-slate-200/50 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 p-1">
+      <div role="tablist" aria-label="Goal views" className="inline-flex max-w-full overflow-x-auto rounded-xl bg-slate-200/50 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -43,7 +45,7 @@ export default function GoalsPage() {
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              'flex items-center gap-2 px-4 h-9 rounded-lg text-[13px] font-medium transition-all',
+              'flex shrink-0 items-center gap-2 px-3 sm:px-4 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all',
               tab === t.id
                 ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow-card'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
@@ -55,6 +57,7 @@ export default function GoalsPage() {
         ))}
       </div>
 
+      {tab === 'plans' && <UpcomingPlans />}
       {tab === 'daily' && <DailyGoals />}
       {tab === 'monthly' && <MonthlyGoals />}
       {tab === 'dreams' && <DreamGoals />}

@@ -3,6 +3,7 @@ import MonthlyGoal from '../models/MonthlyGoal.js';
 import DreamGoal from '../models/DreamGoal.js';
 import Achievement from '../models/Achievement.js';
 import MonthlyJournal from '../models/MonthlyJournal.js';
+import Plan from '../models/Plan.js';
 import DailyMetric from '../models/DailyMetric.js';
 import Habit from '../models/Habit.js';
 import { isDateEditable, toDateString } from '../lib/dateRules.js';
@@ -341,5 +342,68 @@ export const saveMonthlyJournal = async (req, res) => {
     res.json(journal);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+};
+
+/* ---------------------------------- Plans ---------------------------------- */
+
+const PLAN_HISTORY_DAYS = 60;
+
+export const listPlans = async (req, res) => {
+  try {
+    const since = new Date(Date.now() - PLAN_HISTORY_DAYS * 86400000);
+    const plans = await Plan.find({ $or: [{ done: false }, { doneAt: { $gte: since } }] }).sort({ deadline: 1 });
+    res.json(plans);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const createPlan = async (req, res) => {
+  try {
+    const title = String(req.body.title || '').trim().slice(0, 200);
+    if (!title) return res.status(400).json({ message: 'Give the plan a heading.' });
+    const deadline = new Date(req.body.deadline);
+    if (Number.isNaN(deadline.getTime())) return res.status(400).json({ message: 'Pick a deadline.' });
+    if (deadline.getTime() <= Date.now()) return res.status(400).json({ message: 'The deadline has to be in the future.' });
+    const plan = await Plan.create({ title, content: String(req.body.content || '').slice(0, 20000), deadline });
+    res.status(201).json(plan);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const updatePlan = async (req, res) => {
+  try {
+    const plan = await Plan.findById(req.params.id);
+    if (!plan) return res.status(404).json({ message: 'Plan not found' });
+    if (req.body.deadline !== undefined && new Date(req.body.deadline).getTime() !== plan.deadline.getTime()) {
+      return res.status(400).json({ message: "A plan's deadline can't be changed." });
+    }
+    if (req.body.title !== undefined) plan.title = String(req.body.title).trim().slice(0, 200) || plan.title;
+    if (req.body.content !== undefined) plan.content = String(req.body.content).slice(0, 20000);
+    if (req.body.done !== undefined) {
+      plan.done = Boolean(req.body.done);
+      plan.doneAt = plan.done ? new Date() : undefined;
+    }
+    await plan.save();
+    res.json(plan);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+/** Unfinished plans past their deadline can't be deleted; the only way out is marking them done. */
+export const deletePlan = async (req, res) => {
+  try {
+    const plan = await Plan.findById(req.params.id);
+    if (!plan) return res.json({ message: 'Deleted' });
+    if (!plan.done && plan.deadline.getTime() <= Date.now()) {
+      return res.status(400).json({ message: 'This plan is overdue. Mark it done instead.' });
+    }
+    await plan.deleteOne();
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

@@ -176,3 +176,10 @@ export const updateDailyMetric = (data: {
   workoutStatus?: string;
 }) => fetchAPI('/habits/metric', { method: 'POST', body: JSON.stringify(data) });
 
+
+export const fetchPlans = () => fetchAPI('/goals/plans');
+export const createPlan = (data: { title: string; content: string; deadline: string }) =>
+  fetchAPI('/goals/plans', { method: 'POST', body: JSON.stringify(data) });
+export const updatePlan = (id: string, data: { title?: string; content?: string; done?: boolean }) =>
+  fetchAPI(`/goals/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deletePlan = (id: string) => fetchAPI(`/goals/plans/${id}`, { method: 'DELETE' });

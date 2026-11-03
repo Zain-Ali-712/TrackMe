@@ -4,6 +4,8 @@ import { LayoutDashboard, Users, CalendarCheck, Sun, Moon, Menu, X, Layers, Chec
 import { cn } from '@/lib/utils';
 import LeadFormDialog from '@/components/leads/LeadFormDialog';
 import { createLead } from '@/lib/api';
+import { usePlanLock } from '@/hooks/usePlanLock';
+import UpcomingPlans from '@/components/goals/UpcomingPlans';
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -21,6 +23,7 @@ export default function DashboardLayout() {
   });
 
   const location = useLocation();
+  const planLock = usePlanLock();
 
   useEffect(() => {
     if (isDark) {
@@ -82,6 +85,34 @@ export default function DashboardLayout() {
   const pageInfo = getPageInfo();
 
   const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // An unfinished plan past its deadline hides the whole app until it's marked done.
+  if (planLock === 'checking') {
+    return <div className="min-h-screen canvas-surface" aria-busy="true" />;
+  }
+  if (planLock === 'locked') {
+    return (
+      <div className="min-h-screen canvas-surface text-slate-900 dark:text-slate-100 font-sans">
+        <header className="flex h-[72px] items-center justify-between px-4 sm:px-8 border-b border-slate-900/[0.06] dark:border-white/[0.06]">
+          <div className="min-w-0">
+            <h1 className="font-display text-[26px] leading-tight font-medium text-slate-900 dark:text-slate-50">Upcoming Plans</h1>
+            <p className="text-[13px] text-slate-500 dark:text-slate-400 hidden sm:block">Finish what you planned to get the app back</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={toggleDark} aria-label={isDark ? 'Switch to light appearance' : 'Switch to dark appearance'} className="p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-900/[0.05] dark:hover:bg-white/[0.06]">
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button onClick={handleSignOut} aria-label="Sign out" className="p-2 rounded-lg text-slate-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+        <div className="mx-auto max-w-3xl p-4 sm:p-8">
+          <UpcomingPlans locked />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex text-slate-900 dark:text-slate-100 font-sans">
