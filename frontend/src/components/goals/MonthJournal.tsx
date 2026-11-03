@@ -30,7 +30,7 @@ function useAutosave(initial: string, save: (value: string) => Promise<unknown>)
   const [state, setState] = useState<SaveState>('idle');
   const saved = useRef(initial);
   const latest = useRef(initial);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveRef = useRef(save);
   saveRef.current = save;
 
