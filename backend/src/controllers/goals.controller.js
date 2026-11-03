@@ -1,6 +1,8 @@
 import DailyGoal, { GOAL_LOCATIONS } from '../models/DailyGoal.js';
 import MonthlyGoal from '../models/MonthlyGoal.js';
 import DreamGoal from '../models/DreamGoal.js';
+import Achievement from '../models/Achievement.js';
+import MonthlyJournal from '../models/MonthlyJournal.js';
 import DailyMetric from '../models/DailyMetric.js';
 import Habit from '../models/Habit.js';
 import { isDateEditable, toDateString } from '../lib/dateRules.js';
@@ -144,9 +146,11 @@ export const listMonthlyGoals = async (req, res) => {
     const months = Array.from({ length: count }, (_, i) =>
       toDateString(new Date(now.getFullYear(), now.getMonth() - i, 1)).slice(0, 7)
     );
-    const [goals, habits] = await Promise.all([
+    const [goals, habits, achievements, journals] = await Promise.all([
       MonthlyGoal.find({ month: { $in: months } }).sort({ createdAt: 1 }),
-      Habit.find({ archived: false })
+      Habit.find({ archived: false }),
+      Achievement.find({ month: { $in: months } }).sort({ date: -1, createdAt: -1 }),
+      MonthlyJournal.find({ month: { $in: months } })
     ]);
     const ctx = await loadScoringContext(habits);
     const result = [];
@@ -154,6 +158,8 @@ export const listMonthlyGoals = async (req, res) => {
       result.push({
         month,
         goals: goals.filter((g) => g.month === month),
+        achievements: achievements.filter((a) => a.month === month),
+        journal: journals.find((j) => j.month === month) || null,
         auto: await autoGoalsFor(month, ctx)
       });
     }
@@ -271,5 +277,69 @@ export const deleteDream = async (req, res) => {
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+/* ----------------------- Achievements & monthly journal ----------------------- */
+
+export const createAchievement = async (req, res) => {
+  try {
+    const title = String(req.body.title || '').trim().slice(0, 300);
+    if (!title) return res.status(400).json({ message: 'Write the achievement first.' });
+    // The browser's day, as long as it is today or yesterday on the server's clock.
+    const date = isDateEditable(req.body.date) ? req.body.date : toDateString(new Date());
+    const details = String(req.body.details || '').slice(0, 20000);
+    const achievement = await Achievement.create({
+      month: date.slice(0, 7),
+      date,
+      title,
+      details,
+      detailsUpdatedAt: details ? new Date() : undefined
+    });
+    res.status(201).json(achievement);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const updateAchievement = async (req, res) => {
+  try {
+    const achievement = await Achievement.findById(req.params.id);
+    if (!achievement) return res.status(404).json({ message: 'Achievement not found' });
+    if (req.body.title !== undefined) achievement.title = String(req.body.title).trim().slice(0, 300) || achievement.title;
+    if (req.body.details !== undefined) {
+      achievement.details = String(req.body.details).slice(0, 20000);
+      achievement.detailsUpdatedAt = new Date();
+    }
+    await achievement.save();
+    res.json(achievement);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const deleteAchievement = async (req, res) => {
+  try {
+    await Achievement.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/** Save a month's journal; any past or current month, never a future one. */
+export const saveMonthlyJournal = async (req, res) => {
+  try {
+    const { month } = req.params;
+    // One day of slack so a timezone ahead of the server can start its new month.
+    const latest = toDateString(new Date(Date.now() + 86400000)).slice(0, 7);
+    if (!MONTH_RE.test(month) || month > latest) {
+      return res.status(400).json({ message: 'You can only write journals for this month or earlier.' });
+    }
+    const content = String(req.body.content ?? '').slice(0, 50000);
+    const journal = await MonthlyJournal.findOneAndUpdate({ month }, { content }, { upsert: true, new: true });
+    res.json(journal);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 };

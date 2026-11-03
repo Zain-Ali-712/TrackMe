@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Check, Plus, Trash2, Zap, Trophy, Target } from 'lucide-react';
+import { Check, Plus, Trash2, Zap, Trophy, Target, Award, BookOpen, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchMonthlyGoals, createMonthlyGoal, updateMonthlyGoal, deleteMonthlyGoal } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { monthLabel, DONE_CLASSES } from './goalUtils';
+import { AchievementList, JournalEditor, type Achievement, type MonthlyJournalEntry } from './MonthJournal';
 
 interface MonthlyGoal {
   _id: string;
@@ -24,8 +25,13 @@ interface AutoGoal {
 interface MonthData {
   month: string;
   goals: MonthlyGoal[];
+  achievements: Achievement[];
+  journal: MonthlyJournalEntry | null;
   auto: AutoGoal[];
 }
+
+type MonthView = 'goals' | 'achievements' | 'journal';
+const VIEW_KEY = 'trackme_month_view';
 
 const rateOf = (m: MonthData) => {
   const total = m.goals.length + m.auto.length;
@@ -33,24 +39,48 @@ const rateOf = (m: MonthData) => {
   return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
 };
 
+const wordCount = (text?: string) => (text?.trim() ? text.trim().split(/\s+/).length : 0);
+
 export default function MonthlyGoals() {
   const [months, setMonths] = useState<MonthData[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [view, setView] = useState<MonthView>(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_KEY);
+      if (saved === 'goals' || saved === 'achievements' || saved === 'journal') return saved;
+    } catch {}
+    return 'goals';
+  });
 
   useEffect(() => {
     fetchMonthlyGoals(6)
-      .then((res) => setMonths(res.months || []))
+      .then((res) =>
+        setMonths((res.months || []).map((m: MonthData) => ({ ...m, achievements: m.achievements || [], journal: m.journal || null })))
+      )
       .catch(() => toast.error('Could not load monthly goals'))
       .finally(() => setLoading(false));
   }, []);
 
+  const chooseView = (v: MonthView) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {}
+  };
+
   const current = months[0];
-  const previous = months.slice(1).filter((m) => m.goals.length > 0 || m.auto.some((a) => a.current > 0));
+  const previous = months
+    .slice(1)
+    .filter((m) => m.goals.length > 0 || m.achievements.length > 0 || m.journal?.content || m.auto.some((a) => a.current > 0));
 
   const setCurrentGoals = (update: (goals: MonthlyGoal[]) => MonthlyGoal[]) =>
     setMonths((prev) => prev.map((m, i) => (i === 0 ? { ...m, goals: update(m.goals) } : m)));
+  const setAchievements = (month: string) => (update: (list: Achievement[]) => Achievement[]) =>
+    setMonths((prev) => prev.map((m) => (m.month === month ? { ...m, achievements: update(m.achievements) } : m)));
+  const setJournal = (month: string) => (journal: MonthlyJournalEntry) =>
+    setMonths((prev) => prev.map((m) => (m.month === month ? { ...m, journal } : m)));
 
   const addGoal = async () => {
     const value = text.trim();
@@ -93,64 +123,107 @@ export default function MonthlyGoals() {
 
   const currentRate = rateOf(current);
   const bestPrevious = previous.reduce<MonthData | null>((best, m) => (!best || rateOf(m).pct > rateOf(best).pct ? m : best), null);
+  const journalWords = wordCount(current.journal?.content);
+  const tabs = [
+    { key: 'goals', label: 'Goals', icon: Target, count: current.goals.length },
+    { key: 'achievements', label: 'Achievements', icon: Award, count: current.achievements.length },
+    { key: 'journal', label: 'Journal', icon: BookOpen, count: 0 }
+  ] as const;
 
   return (
     <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section className="surface p-5 sm:p-6 min-w-0">
           <h2 className="font-display text-2xl font-medium text-slate-900 dark:text-slate-50">{monthLabel(current.month)}</h2>
-          <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Your goals for the month, plus targets the app tracks for you.
-          </p>
+          <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">Your goals, achievements and journal for the month.</p>
 
-          <form
-            className="mt-5 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              addGoal();
-            }}
-          >
-            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a goal for this month" aria-label="Monthly goal" className="h-9 text-[13px]" maxLength={500} />
-            <Button type="submit" size="sm" className="h-9 text-xs" disabled={!text.trim() || saving}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add
-            </Button>
-          </form>
-
-          <ul className="mt-4 divide-y divide-slate-200/70 dark:divide-slate-800">
-            {current.goals.length === 0 && (
-              <li className="py-6 text-center text-[13px] text-slate-500 dark:text-slate-400">No goals of your own yet this month.</li>
-            )}
-            {current.goals.map((goal) => (
-              <li key={goal._id} className="group flex items-center gap-3 py-2.5">
-                <button
-                  type="button"
-                  onClick={() => toggleGoal(goal)}
-                  aria-label={goal.done ? `Mark "${goal.text}" as not done` : `Mark "${goal.text}" as done`}
-                  className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-[5px] border transition-colors', goal.done ? DONE_CLASSES : 'border-slate-300 dark:border-slate-600 hover:border-slate-500')}
-                >
-                  {goal.done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
-                </button>
-                <span className={cn('flex-1 min-w-0 text-[13.5px] [overflow-wrap:anywhere]', goal.done ? 'text-slate-400 line-through decoration-slate-300 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100')}>
-                  {goal.text}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeGoal(goal)}
-                  aria-label={`Delete "${goal.text}"`}
-                  className="rounded-md p-1 text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
+          <div role="tablist" aria-label="This month" className="mt-4 inline-flex max-w-full rounded-lg bg-slate-100 dark:bg-slate-800/70 p-0.5">
+            {tabs.map(({ key, label, icon: Icon, count }) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={view === key}
+                onClick={() => chooseView(key)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2.5 sm:px-3 py-1.5 text-[12.5px] font-medium transition',
+                  view === key
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+                {count > 0 && <span className="hidden sm:inline tabular-nums text-[11px] text-slate-400 dark:text-slate-500">{count}</span>}
+              </button>
             ))}
-          </ul>
-
-          <h3 className="mt-6 flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
-            <Zap className="h-3.5 w-3.5 text-clay-600 dark:text-clay-400" /> Tracked automatically
-          </h3>
-          <div className="mt-2.5 space-y-3">
-            {current.auto.map((a) => <AutoGoalRow key={a.key} goal={a} />)}
           </div>
+
+          {view === 'goals' && (
+            <div className="mt-4">
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  addGoal();
+                }}
+              >
+                <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a goal for this month" aria-label="Monthly goal" className="h-9 text-[13px]" maxLength={500} />
+                <Button type="submit" size="sm" className="h-9 text-xs" disabled={!text.trim() || saving}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                </Button>
+              </form>
+
+              <ul className="mt-4 divide-y divide-slate-200/70 dark:divide-slate-800">
+                {current.goals.length === 0 && (
+                  <li className="py-6 text-center text-[13px] text-slate-500 dark:text-slate-400">No goals of your own yet this month.</li>
+                )}
+                {current.goals.map((goal) => (
+                  <li key={goal._id} className="group flex items-center gap-3 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleGoal(goal)}
+                      aria-label={goal.done ? `Mark "${goal.text}" as not done` : `Mark "${goal.text}" as done`}
+                      className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-[5px] border transition-colors', goal.done ? DONE_CLASSES : 'border-slate-300 dark:border-slate-600 hover:border-slate-500')}
+                    >
+                      {goal.done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                    </button>
+                    <span className={cn('flex-1 min-w-0 text-[13.5px] [overflow-wrap:anywhere]', goal.done ? 'text-slate-400 line-through decoration-slate-300 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100')}>
+                      {goal.text}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeGoal(goal)}
+                      aria-label={`Delete "${goal.text}"`}
+                      className="rounded-md p-1 text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <h3 className="mt-6 flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
+                <Zap className="h-3.5 w-3.5 text-clay-600 dark:text-clay-400" /> Tracked automatically
+              </h3>
+              <div className="mt-2.5 space-y-3">
+                {current.auto.map((a) => <AutoGoalRow key={a.key} goal={a} />)}
+              </div>
+            </div>
+          )}
+
+          {view === 'achievements' && (
+            <div className="mt-4">
+              <AchievementList achievements={current.achievements} onChange={setAchievements(current.month)} canAdd />
+            </div>
+          )}
+
+          {view === 'journal' && (
+            <div className="mt-4">
+              <p className="mb-2 text-[12.5px] text-slate-500 dark:text-slate-400">Write it at the end of the month, or add to it whenever you like.</p>
+              <JournalEditor month={current.month} journal={current.journal} onSaved={setJournal(current.month)} />
+            </div>
+          )}
         </section>
 
         <section className="surface p-5 sm:p-6 min-w-0">
@@ -158,6 +231,8 @@ export default function MonthlyGoals() {
           <div className="mt-4 grid grid-cols-2 gap-3">
             <StatBox icon={Target} label="Goals reached" value={`${currentRate.done}/${currentRate.total}`} hint={`${currentRate.pct}% of all goals`} />
             <StatBox icon={Check} label="Your goals" value={`${current.goals.filter((g) => g.done).length}/${current.goals.length}`} hint="ticked off" />
+            <StatBox icon={Award} label="Achievements" value={String(current.achievements.length)} hint="this month" />
+            <StatBox icon={BookOpen} label="Journal" value={journalWords ? 'Written' : 'Not yet'} hint={journalWords ? `${journalWords} words` : 'for the end of the month'} />
           </div>
           <h4 className="mt-5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">Previous months</h4>
           {previous.length === 0 ? (
@@ -218,12 +293,39 @@ export default function MonthlyGoals() {
                   <div className="mt-3 space-y-2 border-t border-slate-200/70 dark:border-slate-800 pt-3">
                     {m.auto.map((a) => <AutoGoalRow key={a.key} goal={a} compact />)}
                   </div>
+                  {m.achievements.length > 0 && (
+                    <HistorySection icon={Award} label={`Achievements · ${m.achievements.length}`}>
+                      <AchievementList achievements={m.achievements} onChange={setAchievements(m.month)} />
+                    </HistorySection>
+                  )}
+                  <HistorySection icon={BookOpen} label={m.journal?.content.trim() ? `Journal · ${wordCount(m.journal.content)} words` : 'Write journal'}>
+                    <JournalEditor month={m.month} journal={m.journal} onSaved={setJournal(m.month)} rows={8} />
+                  </HistorySection>
                 </article>
               );
             })}
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function HistorySection({ icon: Icon, label, children }: { icon: React.ElementType; label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3 border-t border-slate-200/70 dark:border-slate-800 pt-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 text-left text-[12px] font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100"
+      >
+        <Icon className="h-3.5 w-3.5 text-clay-600 dark:text-clay-400" />
+        <span className="flex-1">{label}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 text-slate-400 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && <div className="mt-2.5">{children}</div>}
     </div>
   );
 }

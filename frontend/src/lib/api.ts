@@ -154,6 +154,14 @@ export const updateMonthlyGoal = (id: string, data: any) =>
   fetchAPI(`/goals/monthly/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteMonthlyGoal = (id: string) => fetchAPI(`/goals/monthly/${id}`, { method: 'DELETE' });
 
+export const createAchievement = (data: { title: string; date: string; details?: string }) =>
+  fetchAPI('/goals/achievements', { method: 'POST', body: JSON.stringify(data) });
+export const updateAchievement = (id: string, data: { title?: string; details?: string }) =>
+  fetchAPI(`/goals/achievements/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteAchievement = (id: string) => fetchAPI(`/goals/achievements/${id}`, { method: 'DELETE' });
+export const saveMonthlyJournal = (month: string, content: string) =>
+  fetchAPI(`/goals/journal/${month}`, { method: 'PUT', body: JSON.stringify({ content }) });
+
 export const fetchDreams = () => fetchAPI('/goals/dreams');
 export const createDream = (data: any) => fetchAPI('/goals/dreams', { method: 'POST', body: JSON.stringify(data) });
 export const updateDream = (id: string, data: any) =>
