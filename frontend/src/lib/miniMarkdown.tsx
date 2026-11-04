@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * A tiny formatter for goal cards. Supports exactly what the editor toolbar
- * writes:  **bold**, *italic*, "- " bullets and "- [ ] " / "- [x] " checklist
+ * writes:  **bold**, *italic*, ==highlight==, "- " bullets and "- [ ] " / "- [x] " checklist
  * items. Text is rendered as React nodes, never raw HTML.
  */
 
@@ -13,14 +13,20 @@ const BULLET_RE = /^(\s*)[-*] (.*)$/;
 
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
-  const re = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  const re = /(\*\*([^*]+)\*\*|==([^=]+)==|\*([^*]+)\*)/g;
   let last = 0;
   let match: RegExpExecArray | null;
   let i = 0;
   while ((match = re.exec(text))) {
     if (match.index > last) nodes.push(text.slice(last, match.index));
     if (match[2] !== undefined) nodes.push(<strong key={`${keyPrefix}-b${i++}`} className="font-semibold text-slate-900 dark:text-slate-50">{match[2]}</strong>);
-    else nodes.push(<em key={`${keyPrefix}-i${i++}`}>{match[3]}</em>);
+    else if (match[3] !== undefined)
+      nodes.push(
+        <mark key={`${keyPrefix}-h${i++}`} className="rounded-[3px] bg-amber-200/80 px-0.5 text-slate-900 dark:bg-amber-400/30 dark:text-amber-50">
+          {match[3]}
+        </mark>
+      );
+    else nodes.push(<em key={`${keyPrefix}-i${i++}`}>{match[4]}</em>);
     last = match.index + match[0].length;
   }
   if (last < text.length) nodes.push(text.slice(last));
@@ -117,6 +123,8 @@ export function checklistProgress(content: string) {
   return { done, total };
 }
 
+export type FormatKind = 'bold' | 'italic' | 'highlight' | 'bullet' | 'check';
+
 /**
  * Toolbar actions for a textarea: wrap the selection (bold / italic) or prefix
  * the selected lines (bullet / checklist). Returns the new text and selection.
@@ -125,11 +133,11 @@ export function applyFormat(
   value: string,
   start: number,
   end: number,
-  kind: 'bold' | 'italic' | 'bullet' | 'check'
+  kind: FormatKind
 ): { value: string; start: number; end: number } {
-  if (kind === 'bold' || kind === 'italic') {
-    const mark = kind === 'bold' ? '**' : '*';
-    const selected = value.slice(start, end) || (kind === 'bold' ? 'bold text' : 'italic text');
+  if (kind === 'bold' || kind === 'italic' || kind === 'highlight') {
+    const mark = kind === 'bold' ? '**' : kind === 'highlight' ? '==' : '*';
+    const selected = value.slice(start, end) || `${kind} text`;
     const next = value.slice(0, start) + mark + selected + mark + value.slice(end);
     return { value: next, start: start + mark.length, end: start + mark.length + selected.length };
   }

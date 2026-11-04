@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Plus, Trash2, Award } from 'lucide-react';
+import { ChevronDown, Plus, Trash2, Award, Pencil, Loader2, CalendarDays } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createAchievement, updateAchievement, deleteAchievement, saveMonthlyJournal } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import RichTextEditor from '@/components/common/RichTextEditor';
+import { MiniMarkdown, toggleChecklistLine, checklistProgress } from '@/lib/miniMarkdown';
 import { cn } from '@/lib/utils';
 import { shortDate, todayStr } from './goalUtils';
 
@@ -99,16 +100,17 @@ export function JournalEditor({
 
   return (
     <div>
-      <Textarea
+      <RichTextEditor
         value={value}
-        onChange={(e) => change(e.target.value)}
+        onChange={change}
         onBlur={flush}
         rows={rows}
         autoFocus={autoFocus}
         maxLength={50000}
-        aria-label="Monthly journal"
+        ariaLabel="Monthly journal"
+        preview="toggle"
         placeholder="How did this month go? What went well, what didn't, what you learned, what to change next month…"
-        className="text-[13.5px] leading-relaxed resize-y"
+        textareaClassName="text-[13.5px] leading-relaxed"
       />
       <div className="mt-1.5 flex items-center justify-between gap-2">
         <SaveStatus state={state} editedAt={journal?.updatedAt} />
@@ -129,23 +131,20 @@ export function AchievementList({
   onChange: (update: (list: Achievement[]) => Achievement[]) => void;
   canAdd?: boolean;
 }) {
-  const [title, setTitle] = useState('');
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const add = async () => {
-    const value = title.trim();
-    if (!value || adding) return;
-    setAdding(true);
+  const replace = (next: Achievement) => onChange((list) => list.map((x) => (x._id === next._id ? next : x)));
+
+  const toggleCheck = async (a: Achievement, line: number) => {
+    const details = toggleChecklistLine(a.details, line);
+    replace({ ...a, details });
     try {
-      const created: Achievement = await createAchievement({ title: value, date: todayStr() });
-      onChange((list) => [created, ...list]);
-      setTitle('');
-      setOpenId(created._id);
+      replace(await updateAchievement(a._id, { details }));
     } catch (err: any) {
-      toast.error(err?.message || 'Could not add the achievement');
-    } finally {
-      setAdding(false);
+      replace(a);
+      toast.error(err?.message || 'Could not update the checklist');
     }
   };
 
@@ -161,105 +160,190 @@ export function AchievementList({
   };
 
   return (
-    <div>
-      {canAdd && (
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            add();
-          }}
-        >
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Something worth remembering today" aria-label="Achievement" className="h-9 text-[13px]" maxLength={300} />
-          <Button type="submit" size="sm" className="h-9 text-xs" disabled={!title.trim() || adding}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add
-          </Button>
-        </form>
+    <div className="space-y-2.5">
+      {canAdd &&
+        (adding ? (
+          <AchievementEditor
+            onCancel={() => setAdding(false)}
+            onSaved={(created) => {
+              onChange((list) => [created, ...list]);
+              setAdding(false);
+              setOpenId(created._id);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-3.5 text-[13px] font-medium text-slate-600 dark:text-slate-300 hover:border-clay-400 hover:text-clay-700 dark:hover:text-clay-300 transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Add achievement
+          </button>
+        ))}
+
+      {achievements.length === 0 && !adding && (
+        <p className="py-6 text-center text-[13px] text-slate-500 dark:text-slate-400">
+          {canAdd ? 'No achievements yet this month. Add one when something big happens.' : 'No achievements this month.'}
+        </p>
       )}
 
-      <ul className={cn('space-y-2', canAdd && 'mt-4')}>
-        {achievements.length === 0 && (
-          <li className="py-6 text-center text-[13px] text-slate-500 dark:text-slate-400">
-            {canAdd ? 'No achievements yet this month. Add one when something big happens.' : 'No achievements this month.'}
-          </li>
-        )}
-        {achievements.map((a) => (
-          <AchievementItem
+      {achievements.map((a) =>
+        editingId === a._id ? (
+          <AchievementEditor
+            key={a._id}
+            initial={a}
+            onCancel={() => setEditingId(null)}
+            onSaved={(next) => {
+              replace(next);
+              setEditingId(null);
+            }}
+          />
+        ) : (
+          <AchievementCard
             key={a._id}
             achievement={a}
             open={openId === a._id}
             onToggle={() => setOpenId((id) => (id === a._id ? null : a._id))}
-            onSaved={(next) => onChange((list) => list.map((x) => (x._id === next._id ? next : x)))}
+            onToggleCheck={(line) => toggleCheck(a, line)}
+            onEdit={() => {
+              setEditingId(a._id);
+              setOpenId(a._id);
+            }}
             onDelete={() => remove(a)}
           />
-        ))}
-      </ul>
+        )
+      )}
     </div>
   );
 }
 
-function AchievementItem({
+function AchievementCard({
   achievement: a,
   open,
   onToggle,
-  onSaved,
+  onToggleCheck,
+  onEdit,
   onDelete
 }: {
   achievement: Achievement;
   open: boolean;
   onToggle: () => void;
-  onSaved: (a: Achievement) => void;
+  onToggleCheck: (line: number) => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
-  const preview = a.details.trim().split('\n')[0];
+  const hasDetails = !!a.details.trim();
+  const progress = checklistProgress(a.details);
   return (
-    <li className={cn('group rounded-xl border transition-colors', open ? 'border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-850' : 'border-slate-200/70 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700')}>
-      <div className="flex items-center gap-2 pr-1.5">
-        <button type="button" onClick={onToggle} aria-expanded={open} className="flex flex-1 min-w-0 items-start gap-2.5 px-3 py-2.5 text-left">
-          <Award className="mt-[1px] h-4 w-4 shrink-0 text-clay-600 dark:text-clay-400" />
-          <span className="flex-1 min-w-0">
-            <span className="block text-[13.5px] font-medium text-slate-800 dark:text-slate-100 [overflow-wrap:anywhere]">{a.title}</span>
-            <span className="mt-0.5 block text-[11.5px] text-slate-500 dark:text-slate-400">
+    <article
+      className={cn(
+        'rounded-xl border bg-white dark:bg-slate-900 transition-colors',
+        open ? 'border-slate-300 dark:border-slate-700 shadow-card' : 'border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+      )}
+    >
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-3 px-3.5 py-3 text-left">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-clay-50 text-clay-600 dark:bg-clay-500/10 dark:text-clay-400">
+          <Award className="h-4 w-4" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-display text-[15.5px] font-medium leading-snug text-slate-900 dark:text-slate-50 [overflow-wrap:anywhere]">{a.title}</span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1">
+              <CalendarDays className="h-3 w-3" />
               {shortDate(a.date)}
-              {!open && preview && <span className="text-slate-400 dark:text-slate-500"> · {preview.length > 70 ? `${preview.slice(0, 70)}…` : preview}</span>}
             </span>
+            {progress.total > 0 && <span className="tabular-nums">{progress.done}/{progress.total} done</span>}
+            {!hasDetails && <span className="text-slate-400 dark:text-slate-500">No notes yet</span>}
           </span>
-          <ChevronDown className={cn('mt-[2px] h-4 w-4 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')} />
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label={`Delete "${a.title}"`}
-          className="rounded-md p-1 text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      {open && <AchievementDetails achievement={a} onSaved={onSaved} />}
-    </li>
+        </span>
+        <ChevronDown className={cn('mt-1.5 h-4 w-4 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-200/70 dark:border-slate-800 px-3.5 pb-3 pt-3">
+          {hasDetails ? (
+            <MiniMarkdown content={a.details} onToggleChecklist={onToggleCheck} />
+          ) : (
+            <p className="text-[13px] text-slate-500 dark:text-slate-400">Nothing written about this yet.</p>
+          )}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">{a.detailsUpdatedAt ? `Notes edited ${editedLabel(a.detailsUpdatedAt)}` : ''}</span>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onEdit}>
+                <Pencil className="h-3.5 w-3.5 mr-1" /> {hasDetails ? 'Edit' : 'Write notes'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                onClick={onDelete}
+                aria-label={`Delete "${a.title}"`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
   );
 }
 
-function AchievementDetails({ achievement: a, onSaved }: { achievement: Achievement; onSaved: (a: Achievement) => void }) {
-  const { value, change, flush, state } = useAutosave(a.details, async (details) => {
-    onSaved(await updateAchievement(a._id, { details }));
-  });
+function AchievementEditor({ initial, onCancel, onSaved }: { initial?: Achievement; onCancel: () => void; onSaved: (a: Achievement) => void }) {
+  const [title, setTitle] = useState(initial?.title || '');
+  const [details, setDetails] = useState(initial?.details || '');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!title.trim()) return toast.error('Write the achievement first');
+    setBusy(true);
+    try {
+      onSaved(
+        initial
+          ? await updateAchievement(initial._id, { title: title.trim(), details })
+          : await createAchievement({ title: title.trim(), details, date: todayStr() })
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not save the achievement');
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="px-3 pb-3">
-      <Textarea
-        value={value}
-        onChange={(e) => change(e.target.value)}
-        onBlur={flush}
-        rows={5}
-        autoFocus={!a.details}
-        maxLength={20000}
-        aria-label={`Notes for "${a.title}"`}
-        placeholder="What happened, how it felt, what it took to get here…"
-        className="text-[13px] resize-y"
+    <article className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-card p-3.5 sm:p-4 space-y-3">
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="What did you achieve?"
+        aria-label="Achievement"
+        className="h-10 font-display text-[16px]"
+        maxLength={300}
+        autoFocus
       />
-      <div className="mt-1.5">
-        <SaveStatus state={state} editedAt={a.detailsUpdatedAt} />
+      <RichTextEditor
+        value={details}
+        onChange={setDetails}
+        placeholder={'What happened, how it felt, what it took to get here…\n- [ ] Anything to follow up'}
+        rows={5}
+        maxLength={20000}
+        ariaLabel="Achievement notes"
+        textareaClassName="min-h-[110px]"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1 text-[11.5px] text-slate-500 dark:text-slate-400">
+          <CalendarDays className="h-3.5 w-3.5" />
+          {initial ? `Added ${shortDate(initial.date)}` : `Will be dated ${shortDate(todayStr())}`}
+        </span>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button size="sm" className="h-8 text-xs" onClick={submit} disabled={busy}>
+            {busy && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+            {initial ? 'Save changes' : 'Save achievement'}
+          </Button>
+        </div>
       </div>
-    </div>
+    </article>
   );
 }

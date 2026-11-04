@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Plus, ImagePlus, Bold, Italic, List, ListChecks, Pencil, Trash2, StickyNote, Trophy, X, Loader2, Mountain, RotateCcw,
+  Plus, ImagePlus, Pencil, Trash2, StickyNote, Trophy, X, Loader2, Mountain, RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchDreams, createDream, updateDream, deleteDream } from '@/lib/api';
 import MultiNotesDialog, { getNotesCount } from '@/components/common/MultiNotesDialog';
-import { MiniMarkdown, toggleChecklistLine, checklistProgress, applyFormat } from '@/lib/miniMarkdown';
+import { MiniMarkdown, toggleChecklistLine, checklistProgress } from '@/lib/miniMarkdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import RichTextEditor from '@/components/common/RichTextEditor';
 import { cn } from '@/lib/utils';
 
 interface Dream {
@@ -298,18 +298,6 @@ function DreamEditor({
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const areaRef = useRef<HTMLTextAreaElement>(null);
-
-  const format = (kind: 'bold' | 'italic' | 'bullet' | 'check') => {
-    const el = areaRef.current;
-    if (!el) return;
-    const result = applyFormat(content, el.selectionStart, el.selectionEnd, kind);
-    setContent(result.value);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(result.start, result.end);
-    });
-  };
 
   const pickPhoto = async (file?: File) => {
     if (!file) return;
@@ -367,29 +355,14 @@ function DreamEditor({
       <div className="p-4 sm:p-5 space-y-3">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Goal title" aria-label="Goal title" className="h-10 font-display text-lg" maxLength={200} autoFocus={!initial} />
 
-        <div className="rounded-lg border border-input overflow-hidden focus-within:border-clay-500/70 focus-within:ring-[3px] focus-within:ring-clay-500/15">
-          <div className="flex items-center gap-0.5 border-b border-slate-200/70 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 px-1.5 py-1">
-            <ToolBtn label="Bold" onClick={() => format('bold')}><Bold className="h-3.5 w-3.5" /></ToolBtn>
-            <ToolBtn label="Italic" onClick={() => format('italic')}><Italic className="h-3.5 w-3.5" /></ToolBtn>
-            <ToolBtn label="Bullet list" onClick={() => format('bullet')}><List className="h-3.5 w-3.5" /></ToolBtn>
-            <ToolBtn label="Checklist" onClick={() => format('check')}><ListChecks className="h-3.5 w-3.5" /></ToolBtn>
-          </div>
-          <Textarea
-            ref={areaRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={'Why it matters, and the steps to get there.\n- [ ] First step'}
-            rows={6}
-            className="border-0 rounded-none focus-visible:ring-0 text-[13px] resize-y min-h-[140px]"
-          />
-        </div>
-
-        {content.trim() && (
-          <div className="rounded-lg bg-slate-50 dark:bg-slate-850 p-3">
-            <p className="mb-1.5 text-[10.5px] font-medium text-slate-400">Preview</p>
-            <MiniMarkdown content={content} />
-          </div>
-        )}
+        <RichTextEditor
+          value={content}
+          onChange={setContent}
+          placeholder={'Why it matters, and the steps to get there.\n- [ ] First step'}
+          rows={6}
+          ariaLabel="Goal details"
+          textareaClassName="min-h-[140px]"
+        />
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onCancel} disabled={busy}>Cancel</Button>
@@ -400,21 +373,6 @@ function DreamEditor({
         </div>
       </div>
     </article>
-  );
-}
-
-function ToolBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-50"
-    >
-      {children}
-    </button>
   );
 }
 

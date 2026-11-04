@@ -4,6 +4,7 @@ import { ArrowUpRight, Check, Users, PhoneCall, Flame, ListChecks } from 'lucide
 import { fetchLeadStats, fetchMonthHabitData } from '@/lib/api';
 import LeadsTrendChart from '@/components/dashboard/LeadsTrendChart';
 import UpcomingAppointments from '@/components/dashboard/UpcomingAppointments';
+import UpcomingPlansCard from '@/components/dashboard/UpcomingPlansCard';
 import { cn } from '@/lib/utils';
 import { useChartTheme } from '@/lib/chartTheme';
 import { STREAK_THRESHOLD } from '@/lib/habitScoring';
@@ -181,7 +182,8 @@ export default function DashboardHome() {
         <div className="lg:col-span-2">
           <LeadsTrendChart data={trends} />
         </div>
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 flex flex-col gap-5">
+          <UpcomingPlansCard />
           <UpcomingAppointments appointments={stats.upcomingAppointments || []} />
         </div>
       </div>

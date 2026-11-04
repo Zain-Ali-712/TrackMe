@@ -8,6 +8,7 @@ import { useChartTheme, ChartTooltipCard } from '@/lib/chartTheme';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import DailyHistory from './DailyHistory';
 import { LOCATIONS, todayStr, yesterdayStr, addDays, longDate, shortDate, formatTime, DONE_CLASSES } from './goalUtils';
 
 interface DailyGoal {
@@ -326,48 +327,7 @@ export default function DailyGoals() {
         </section>
       </div>
 
-      {/* History */}
-      <section>
-        <h3 className="font-display text-lg font-medium text-slate-900 dark:text-slate-50 mb-3">History</h3>
-        {pastDates.length === 0 ? (
-          <p className="surface p-6 text-center text-[13px] text-slate-500 dark:text-slate-400">Past days will show up here.</p>
-        ) : (
-          <div className="columns-1 sm:columns-2 xl:columns-3 gap-4 [column-fill:_balance]">
-            {pastDates.map((date) => {
-              const list = byDate.get(date)!;
-              const done = list.filter((g) => g.done).length;
-              const perfect = done === list.length;
-              return (
-                <article key={date} className="surface mb-4 break-inside-avoid p-4">
-                  <header className="flex items-center justify-between gap-2">
-                    <h4 className="text-[13px] font-semibold text-slate-800 dark:text-slate-100">{shortDate(date)}</h4>
-                    <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums', perfect ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
-                      {done}/{list.length}
-                    </span>
-                  </header>
-                  <ul className="mt-2.5 space-y-1.5">
-                    {list.map((g) => (
-                      <li key={g._id} className="flex items-start gap-2 text-[12.5px]">
-                        <span className={cn('mt-[2px] grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border', g.done ? DONE_CLASSES : 'border-slate-300 dark:border-slate-600')}>
-                          {g.done && <Check className="h-3 w-3" strokeWidth={3} />}
-                        </span>
-                        <span className={cn('flex-1 min-w-0 [overflow-wrap:anywhere]', g.done ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400')}>
-                          {g.text}
-                          {(g.time || g.location) && (
-                            <span className="block text-[10.5px] text-slate-400">
-                              {[formatTime(g.time), g.location].filter(Boolean).join(' · ')}
-                            </span>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      <DailyHistory dates={pastDates} byDate={byDate} />
     </div>
   );
 }

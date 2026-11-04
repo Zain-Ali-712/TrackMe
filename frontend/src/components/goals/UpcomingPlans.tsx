@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { Plus, Check, Pencil, Trash2, Lock, AlarmClock, Bold, Italic, List, ListChecks, Loader2, RotateCcw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Check, Pencil, Trash2, Lock, AlarmClock, Loader2, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchPlans, createPlan, updatePlan, deletePlan } from '@/lib/api';
-import { MiniMarkdown, toggleChecklistLine, checklistProgress, applyFormat } from '@/lib/miniMarkdown';
+import { MiniMarkdown, toggleChecklistLine, checklistProgress } from '@/lib/miniMarkdown';
+import RichTextEditor from '@/components/common/RichTextEditor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { TimePicker } from './DailyGoals';
 import { addDays, todayStr, DONE_CLASSES } from './goalUtils';
@@ -26,10 +26,10 @@ const announce = () => window.dispatchEvent(new Event(PLANS_CHANGED_EVENT));
 
 export const isOverdue = (plan: Plan, now = Date.now()) => !plan.done && new Date(plan.deadline).getTime() <= now;
 
-const deadlineLabel = (iso: string) =>
+export const deadlineLabel = (iso: string) =>
   new Date(iso).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-function relative(ms: number) {
+export function relative(ms: number) {
   const mins = Math.round(Math.abs(ms) / 60000);
   if (mins < 60) return `${mins} min`;
   const hours = Math.floor(mins / 60);
@@ -285,18 +285,6 @@ function PlanEditor({ initial, onCancel, onSaved }: { initial?: Plan; onCancel: 
   const [date, setDate] = useState(addDays(todayStr(), 1));
   const [time, setTime] = useState('');
   const [busy, setBusy] = useState(false);
-  const areaRef = useRef<HTMLTextAreaElement>(null);
-
-  const format = (kind: 'bold' | 'italic' | 'bullet' | 'check') => {
-    const el = areaRef.current;
-    if (!el) return;
-    const result = applyFormat(content, el.selectionStart, el.selectionEnd, kind);
-    setContent(result.value);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(result.start, result.end);
-    });
-  };
 
   const submit = async () => {
     if (!title.trim()) return toast.error('Give the plan a heading');
@@ -327,30 +315,14 @@ function PlanEditor({ initial, onCancel, onSaved }: { initial?: Plan; onCancel: 
     <article className="surface p-4 sm:p-5 space-y-3">
       <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Plan heading" aria-label="Plan heading" className="h-10 font-display text-lg" maxLength={200} autoFocus />
 
-      <div className="rounded-lg border border-input overflow-hidden focus-within:border-clay-500/70 focus-within:ring-[3px] focus-within:ring-clay-500/15">
-        <div className="flex items-center gap-0.5 border-b border-slate-200/70 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 px-1.5 py-1">
-          <ToolBtn label="Bold" onClick={() => format('bold')}><Bold className="h-3.5 w-3.5" /></ToolBtn>
-          <ToolBtn label="Italic" onClick={() => format('italic')}><Italic className="h-3.5 w-3.5" /></ToolBtn>
-          <ToolBtn label="Bullet list" onClick={() => format('bullet')}><List className="h-3.5 w-3.5" /></ToolBtn>
-          <ToolBtn label="Checklist" onClick={() => format('check')}><ListChecks className="h-3.5 w-3.5" /></ToolBtn>
-        </div>
-        <Textarea
-          ref={areaRef}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={'What exactly needs doing.\n- [ ] First step'}
-          rows={5}
-          aria-label="Plan details"
-          className="border-0 rounded-none focus-visible:ring-0 text-[13px] resize-y min-h-[120px]"
-        />
-      </div>
-
-      {content.trim() && (
-        <div className="rounded-lg bg-slate-50 dark:bg-slate-850 p-3">
-          <p className="mb-1.5 text-[10.5px] font-medium text-slate-400">Preview</p>
-          <MiniMarkdown content={content} />
-        </div>
-      )}
+      <RichTextEditor
+        value={content}
+        onChange={setContent}
+        placeholder={'What exactly needs doing.\n- [ ] First step'}
+        rows={5}
+        ariaLabel="Plan details"
+        textareaClassName="min-h-[120px]"
+      />
 
       {initial ? (
         <p className="flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-slate-400">
@@ -381,20 +353,5 @@ function PlanEditor({ initial, onCancel, onSaved }: { initial?: Plan; onCancel: 
         </Button>
       </div>
     </article>
-  );
-}
-
-function ToolBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-50"
-    >
-      {children}
-    </button>
   );
 }
