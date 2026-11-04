@@ -38,6 +38,8 @@ const leadSchema = new mongoose.Schema(
 );
 
 leadSchema.index({ niche: 1, createdAt: -1 });
+leadSchema.index({ createdAt: -1 });
+leadSchema.index({ coldCalled: 1 });
 
 const Lead = mongoose.model('Lead', leadSchema);
 export default Lead;

@@ -40,53 +40,157 @@ export async function logout() {
     /* logging out locally is what matters */
   }
   clearToken();
+  responseCache.clear();
 }
 
-/** Validate a stored token on boot so a stale session doesn't flash the UI. */
+/** Read a token's expiry without the server; the token is "<base64url JSON>.<signature>". */
+function tokenExpiresAt(token: string): number {
+  try {
+    const payload = token.slice(0, token.lastIndexOf('.')).replace(/-/g, '+').replace(/_/g, '/');
+    const { exp } = JSON.parse(atob(payload));
+    return typeof exp === 'number' ? exp * 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Decide on boot whether the stored session is usable. An unexpired token lets
+ * the app open straight away; the server still checks it in the background,
+ * and any 401 later signs the user out.
+ */
 export async function verifySession(): Promise<boolean> {
   const token = getToken();
   if (!token) return false;
 
-  try {
-    const response = await fetch(`${API_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
+  if (tokenExpiresAt(token) > Date.now()) {
+    checkSessionWithServer(token);
+    return true;
+  }
+  clearToken();
+  return false;
+}
+
+function checkSessionWithServer(token: string) {
+  fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => {
+      if (response.status === 401 && getToken() === token) {
+        clearToken();
+        window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+      }
+    })
+    .catch(() => {
+      /* offline: keep the session */
     });
-    if (!response.ok) {
+}
+
+const REQUEST_TIMEOUT_MS = 20000;
+const RETRY_DELAYS_MS = [700, 2000];
+const CACHE_TTL_MS = 30000;
+// Statuses worth retrying: the server or its database was briefly unavailable.
+const RETRYABLE = new Set([502, 503, 504]);
+
+/** Recent GET responses, so moving between pages doesn't refetch what was just loaded. */
+const responseCache = new Map<string, { at: number; data: unknown }>();
+/** GETs in flight, so two components asking for the same thing share one request. */
+const inFlight = new Map<string, Promise<unknown>>();
+/** Bumped by every write; a GET that started before a write must not refill the cache with old data. */
+let cacheGeneration = 0;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const copy = <T,>(data: T): T => (data === null || typeof data !== 'object' ? data : structuredClone(data));
+
+class HttpError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+async function request(url: string, options: RequestInit) {
+  const token = getToken();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal ?? controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+
+    if (response.status === 401) {
       clearToken();
-      return false;
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     }
-    return true;
-  } catch {
-    // A network failure shouldn't log the user out; keep the token.
-    return true;
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new HttpError(errorData?.message || `API Error: ${response.status} ${response.statusText}`, response.status);
+    }
+
+    return response.json();
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw new HttpError('The server took too long to respond', 504);
+    if (error instanceof HttpError) throw error;
+    throw new HttpError('Could not reach the server', 0); // offline or the request never landed
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** GETs retry a couple of times on network hiccups and cold starts; writes never retry, so nothing is saved twice. */
+async function requestWithRetry(url: string, options: RequestInit) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request(url, options);
+    } catch (error: any) {
+      const retryable = error instanceof HttpError && (error.status === 0 || RETRYABLE.has(error.status));
+      if (!retryable || attempt >= RETRY_DELAYS_MS.length) throw error;
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    }
   }
 }
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   const url = `${API_URL}${endpoint}`;
-  const token = getToken();
+  const method = (options.method || 'GET').toUpperCase();
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-
-  if (response.status === 401) {
-    clearToken();
-    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  if (method !== 'GET') {
+    try {
+      return await request(url, options);
+    } finally {
+      // Anything cached may now be out of date, even if the write failed halfway.
+      cacheGeneration += 1;
+      responseCache.clear();
+      inFlight.clear();
+    }
   }
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.message || `API Error: ${response.status} ${response.statusText}`);
-  }
+  const cached = responseCache.get(url);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return copy(cached.data);
 
-  return response.json();
+  let pending = inFlight.get(url);
+  if (!pending) {
+    const generation = cacheGeneration;
+    const current: Promise<unknown> = requestWithRetry(url, options)
+      .then((data) => {
+        if (generation === cacheGeneration) responseCache.set(url, { at: Date.now(), data });
+        return data;
+      })
+      .finally(() => {
+        if (inFlight.get(url) === current) inFlight.delete(url);
+      });
+    pending = current;
+    inFlight.set(url, pending);
+  }
+  return copy(await pending);
 }
+
+/** Forget cached GET responses, e.g. after signing out. */
+export const clearApiCache = () => responseCache.clear();
 
 // Niches
 export const fetchNiches = () => fetchAPI('/niches');

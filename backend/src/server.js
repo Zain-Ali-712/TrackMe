@@ -3,7 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import compression from 'compression';
 import dotenv from 'dotenv';
-import { connectDB } from './config/db.js';
+import { connectDB, requireDB } from './config/db.js';
 import { getConfigError } from './config/authEnv.js';
 import { requireAuth } from './middleware/auth.js';
 
@@ -57,10 +57,8 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// Connect once and reuse the pooled connection. Previously every single
-// request went through connectDB(), which awaited a mongoose.connect() on the
-// hot path of all pages.
-connectDB();
+// Start connecting as soon as the function boots; requests below wait for it.
+connectDB().catch(() => {});
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
@@ -69,6 +67,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 
 app.use('/api', requireAuth);
+app.use('/api', requireDB);
 app.use('/api/niches', nicheRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/appointments', appointmentRoutes);

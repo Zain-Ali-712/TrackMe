@@ -32,7 +32,8 @@ export const getLeads = async (req, res) => {
     
     const leads = await Lead.find(query)
       .populate('niche', 'name icon color')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
       
     res.json(leads);
   } catch (error) {
@@ -44,7 +45,8 @@ export const getAllLeads = async (req, res) => {
   try {
     const leads = await Lead.find()
       .populate('niche', 'name icon color')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(leads);
   } catch (error) {
     res.status(500).json({ message: error.message });

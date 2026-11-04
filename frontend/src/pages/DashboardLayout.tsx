@@ -87,9 +87,6 @@ export default function DashboardLayout() {
   const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
   // An unfinished plan past its deadline hides the whole app until it's marked done.
-  if (planLock === 'checking') {
-    return <div className="min-h-screen canvas-surface" aria-busy="true" />;
-  }
   if (planLock === 'locked') {
     return (
       <div className="min-h-screen canvas-surface text-slate-900 dark:text-slate-100 font-sans">
@@ -115,7 +112,12 @@ export default function DashboardLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex text-slate-900 dark:text-slate-100 font-sans">
+    // While the plan check is in flight the page still mounts and loads its data, just unseen,
+    // so an overdue plan never flashes the dashboard and nothing waits on the check.
+    <div
+      aria-busy={planLock === 'checking'}
+      className={cn('min-h-screen bg-slate-100 dark:bg-slate-950 flex text-slate-900 dark:text-slate-100 font-sans', planLock === 'checking' && 'invisible')}
+    >
       {/* Mobile overlay */}
       {isMobileMenuOpen && (
         <div

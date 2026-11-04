@@ -59,8 +59,30 @@ export const DEFAULT_HABITS = [
  * habits keep scoring their past days exactly as before.
  */
 let catalogSynced = false;
+
+/** One read to tell whether any of the catalog changes below still has work to do. */
+async function catalogNeedsSync() {
+  const all = await Habit.find().select('name retiredFrom').lean();
+  if (all.length === 0) return false;
+  const has = (re) => all.some((h) => re.test(h.name));
+  return (
+    has(/^writing\s+dreams?$/i) ||
+    has(/^wake\s*up\b.*\b4\s*(am)?\b/i) ||
+    !has(/read\s+before\s+sleep/i) ||
+    all.some((h) => /linkedin/i.test(h.name) && !/^linkedin \/ job$/i.test(h.name)) ||
+    all.some((h) => /(job|scholarship|\bfyp\b)/i.test(h.name) && !/linkedin/i.test(h.name) && !h.retiredFrom) ||
+    !has(/personal\s+brand/i) ||
+    !has(/meeting\s+goals?/i)
+  );
+}
+
 async function syncHabitCatalog() {
   if (catalogSynced) return;
+  // Already up to date (the usual case): skip the ten sequential checks below.
+  if (!(await catalogNeedsSync())) {
+    catalogSynced = true;
+    return;
+  }
   await Habit.updateMany({ name: { $regex: /^writing\s+dreams?$/i } }, { name: 'Writing Goals' });
   await Habit.updateMany({ name: { $regex: /^wake\s*up\b.*\b4\s*(am)?\b/i } }, { name: 'Wake up 5:30AM' });
   const existing = await Habit.findOne({ name: { $regex: /read\s+before\s+sleep/i } });
@@ -175,9 +197,17 @@ export const getMonthData = async (req, res) => {
     const visibleHabits = habits.filter((h) => !h.retiredFrom || h.retiredFrom > `${monthPrefix}-31`);
 
     const monthRegex = new RegExp(`^${monthPrefix}`);
-    const [ctx, metrics] = await Promise.all([
+    // Recent 7 days nutrition & workout history (spans across month boundary seamlessly)
+    const sevenDates = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      sevenDates.push(toDateString(d));
+    }
+    const [ctx, metrics, recentMetrics] = await Promise.all([
       loadScoringContext(habits),
-      DailyMetric.find({ date: { $regex: monthRegex } }).select('date sleepHours notes calories protein workoutStatus')
+      DailyMetric.find({ date: { $regex: monthRegex } }).select('date sleepHours notes calories protein workoutStatus').lean(),
+      DailyMetric.find({ date: { $in: sevenDates } }).lean()
     ]);
 
     // Daily lead / call / daily-goal activity for this month
@@ -191,14 +221,6 @@ export const getMonthData = async (req, res) => {
       if (ctx.goalsByDate.get(dateStr)) goalsByDay[day] = ctx.goalsByDate.get(dateStr);
     }
 
-    // Recent 7 days nutrition & workout history (spans across month boundary seamlessly)
-    const sevenDates = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      sevenDates.push(toDateString(d));
-    }
-    const recentMetrics = await DailyMetric.find({ date: { $in: sevenDates } });
     const recentMetricsMap = {};
     recentMetrics.forEach(m => {
       recentMetricsMap[m.date] = m;
