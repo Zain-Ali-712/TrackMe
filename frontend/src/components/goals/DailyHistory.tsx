@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, ChevronDown, Clock, MapPin, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { addDays, formatTime, todayStr, DONE_CLASSES } from './goalUtils';
+import { addDays, formatTime, todayStr } from './goalUtils';
 
 interface HistoryGoal {
   _id: string;
@@ -140,31 +140,47 @@ function DayCard({ date, goals }: { date: string; goals: HistoryGoal[] }) {
         </div>
       </header>
 
-      <ul className="mt-3 space-y-1.5 border-t border-slate-200/70 dark:border-slate-800 pt-2.5">
+      <ul className="mt-3 space-y-1.5">
         {goals.map((g) => (
-          <li key={g._id} className="flex items-start gap-2 text-[12.5px]">
-            <span className={cn('mt-[2px] grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border', g.done ? DONE_CLASSES : 'border-slate-300 dark:border-slate-600')}>
-              {g.done && <Check className="h-3 w-3" strokeWidth={3} />}
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className={cn('block [overflow-wrap:anywhere]', g.done ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400')}>{g.text}</span>
+          <li
+            key={g._id}
+            className={cn(
+              'flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs',
+              g.done
+                ? 'bg-gradient-to-r from-emerald-50 to-emerald-100/70 border-emerald-200/80 dark:from-emerald-950/40 dark:to-emerald-900/20 dark:border-emerald-800/60'
+                : 'bg-slate-50 border-slate-200/80 dark:bg-slate-800/40 dark:border-slate-800'
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <p className={cn('font-medium leading-snug [overflow-wrap:anywhere]', g.done ? 'text-emerald-900 dark:text-emerald-100' : 'text-slate-400 dark:text-slate-500')}>
+                {g.text}
+              </p>
               {(g.time || g.location) && (
-                <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-slate-400 dark:text-slate-500">
+                <p className={cn('mt-px flex flex-wrap items-center gap-x-2 text-[10px] tabular-nums', g.done ? 'text-emerald-700/70 dark:text-emerald-300/60' : 'text-slate-400 dark:text-slate-500')}>
                   {g.time && (
-                    <span className="inline-flex items-center gap-0.5 tabular-nums">
+                    <span className="inline-flex items-center gap-0.5">
                       <Clock className="h-2.5 w-2.5" />
                       {formatTime(g.time)}
                     </span>
                   )}
                   {g.location && (
-                    <span className="inline-flex items-center gap-0.5 rounded bg-slate-100 dark:bg-slate-800 px-1 py-px">
+                    <span className="inline-flex items-center gap-0.5">
                       <MapPin className="h-2.5 w-2.5" />
                       {g.location}
                     </span>
                   )}
-                </span>
+                </p>
               )}
-            </span>
+            </div>
+            {g.done ? (
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                <Check className="h-2.5 w-2.5" strokeWidth={3} /> Done
+              </span>
+            ) : (
+              <span className="shrink-0 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                Missed
+              </span>
+            )}
           </li>
         ))}
       </ul>
