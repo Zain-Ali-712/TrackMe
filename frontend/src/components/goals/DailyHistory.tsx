@@ -84,7 +84,7 @@ export default function DailyHistory({ dates, byDate }: { dates: string[]; byDat
                     )}
                   </div>
                 </header>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 items-start">
                   {week.dates.map((date) => (
                     <DayCard key={date} date={date} goals={byDate.get(date) || []} />
                   ))}
@@ -113,10 +113,17 @@ function DayCard({ date, goals }: { date: string; goals: HistoryGoal[] }) {
   const pct = goals.length ? Math.round((done / goals.length) * 100) : 0;
   const perfect = goals.length > 0 && done === goals.length;
   const p = parts(date);
+  const [open, setOpen] = useState(false);
 
   return (
     <article className={cn('surface p-3.5 flex flex-col', perfect && 'ring-1 ring-[#2da44e]/30 dark:ring-[#2ea043]/30')}>
-      <header className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={`${open ? 'Hide' : 'Show'} goals for ${p.weekday} ${p.month} ${p.day}`}
+        className="flex w-full items-center gap-3 text-left"
+      >
         <div className="w-11 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden text-center bg-white dark:bg-slate-900">
           <div className={cn('text-[9.5px] font-semibold uppercase tracking-wide py-px text-white', perfect ? 'bg-[#116329] dark:bg-[#2ea043]' : 'bg-slate-500 dark:bg-slate-600')}>
             {p.weekday}
@@ -137,9 +144,18 @@ function DayCard({ date, goals }: { date: string; goals: HistoryGoal[] }) {
           <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
             <div className={cn('h-full rounded-full', rateColor(pct))} style={{ width: `${pct}%` }} />
           </div>
+          {!open && (
+            <div className="mt-1.5 flex flex-wrap gap-1" aria-hidden>
+              {goals.map((g) => (
+                <span key={g._id} className={cn('h-2 w-2 rounded-[3px]', g.done ? 'bg-[#2da44e] dark:bg-[#2ea043]' : 'bg-slate-200 dark:bg-slate-700')} />
+              ))}
+            </div>
+          )}
         </div>
-      </header>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')} />
+      </button>
 
+      {open && (
       <ul className="mt-3 space-y-1.5">
         {goals.map((g) => (
           <li
@@ -184,6 +200,7 @@ function DayCard({ date, goals }: { date: string; goals: HistoryGoal[] }) {
           </li>
         ))}
       </ul>
+      )}
     </article>
   );
 }
