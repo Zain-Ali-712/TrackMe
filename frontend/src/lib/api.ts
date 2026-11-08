@@ -271,6 +271,22 @@ export const createDream = (data: any) => fetchAPI('/goals/dreams', { method: 'P
 export const updateDream = (id: string, data: any) =>
   fetchAPI(`/goals/dreams/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteDream = (id: string) => fetchAPI(`/goals/dreams/${id}`, { method: 'DELETE' });
+
+/** Photos never change once saved, so each one is fetched once per visit and kept. */
+const dreamImageCache = new Map<string, Promise<string>>();
+export const fetchDreamImage = (imageId: string): Promise<string> => {
+  let pending = dreamImageCache.get(imageId);
+  if (!pending) {
+    pending = fetchAPI(`/goals/dreams/images/${imageId}`).then((res: { data: string }) => res.data);
+    pending.catch(() => dreamImageCache.delete(imageId));
+    dreamImageCache.set(imageId, pending);
+  }
+  return pending;
+};
+export const addDreamImage = (dreamId: string, image: string) =>
+  fetchAPI(`/goals/dreams/${dreamId}/images`, { method: 'POST', body: JSON.stringify({ image }) });
+export const deleteDreamImage = (dreamId: string, imageId: string) =>
+  fetchAPI(`/goals/dreams/${dreamId}/images/${imageId}`, { method: 'DELETE' });
 export const updateDailyMetric = (data: {
   date: string;
   sleepHours?: number;
@@ -282,8 +298,8 @@ export const updateDailyMetric = (data: {
 
 
 export const fetchPlans = () => fetchAPI('/goals/plans');
-export const createPlan = (data: { title: string; content: string; deadline: string }) =>
+export const createPlan = (data: { title: string; content: string; startAt?: string; deadline: string; startNow?: boolean }) =>
   fetchAPI('/goals/plans', { method: 'POST', body: JSON.stringify(data) });
-export const updatePlan = (id: string, data: { title?: string; content?: string; done?: boolean }) =>
+export const updatePlan = (id: string, data: { title?: string; content?: string; done?: boolean; started?: boolean; deadline?: string }) =>
   fetchAPI(`/goals/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deletePlan = (id: string) => fetchAPI(`/goals/plans/${id}`, { method: 'DELETE' });

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Plus, ImagePlus, Pencil, Trash2, StickyNote, Trophy, X, Loader2, Mountain, RotateCcw,
+  Plus, Pencil, Trash2, StickyNote, Trophy, Loader2, Mountain, RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { fetchDreams, createDream, updateDream, deleteDream } from '@/lib/api';
+import { fetchDreams, createDream, updateDream, deleteDream, addDreamImage, deleteDreamImage } from '@/lib/api';
+import { PhotoGallery, PhotoManager, type EditablePhoto } from './DreamPhotos';
 import MultiNotesDialog, { getNotesCount } from '@/components/common/MultiNotesDialog';
 import { MiniMarkdown, toggleChecklistLine, checklistProgress } from '@/lib/miniMarkdown';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import { cn } from '@/lib/utils';
 interface Dream {
   _id: string;
   title: string;
-  image: string;
+  images?: string[]; // photo ids, the first is the cover
   content: string;
   notes: string;
   achievedAt?: string | null;
@@ -24,26 +25,36 @@ interface Dream {
 const fmt = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
-/** Resize a photo in the browser so it uploads small (max 1280px, JPEG). */
-async function compressImage(file: File): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error('That image could not be read.'));
-      el.src = url;
-    });
-    const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
-    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.82);
-  } finally {
-    URL.revokeObjectURL(url);
+type DreamFields = { title: string; content: string };
+
+/**
+ * Save a goal and its photos: text first, then removed photos go, new ones
+ * upload one by one (each request stays small), and the order sets the cover.
+ */
+async function persistDream(initial: Dream | undefined, fields: DreamFields, photos: EditablePhoto[], onStep: (text: string) => void): Promise<Dream> {
+  const dream: Dream = initial ? await updateDream(initial._id, fields) : await createDream(fields);
+  const keep = new Set(photos.filter((p) => p.id).map((p) => p.id));
+  for (const old of initial?.images || []) {
+    if (!keep.has(old)) await deleteDreamImage(dream._id, old);
   }
+  const ids: string[] = [];
+  const fresh = photos.filter((p) => !p.id).length;
+  let uploaded = 0;
+  let failed = 0;
+  for (const photo of photos) {
+    if (photo.id) {
+      ids.push(photo.id);
+      continue;
+    }
+    onStep(`Uploading photo ${++uploaded} of ${fresh}`);
+    try {
+      ids.push((await addDreamImage(dream._id, photo.data!))._id);
+    } catch {
+      failed += 1;
+    }
+  }
+  if (failed) toast.error(`${failed} photo${failed === 1 ? '' : 's'} could not be uploaded`);
+  return ids.length || initial?.images?.length ? updateDream(dream._id, { images: ids }) : dream;
 }
 
 /** Columns for the masonry grid: 1 on phones, 2 on tablets, 3 on desktop. */
@@ -99,8 +110,8 @@ export default function DreamGoals() {
       node: (
         <DreamEditor
           onCancel={() => setCreating(false)}
-          onSave={async (fields) => {
-            const created = await createDream(fields);
+          onSave={async (fields, photos, onStep) => {
+            const created = await persistDream(undefined, fields, photos, onStep);
             setDreams((prev) => [...prev, created]);
             setCreating(false);
           }}
@@ -115,6 +126,7 @@ export default function DreamGoals() {
         <DreamCard
           dream={dream}
           onSave={(changes) => save(dream._id, changes)}
+          onSaveAll={async (fields, photos, onStep) => replace(await persistDream(dream, fields, photos, onStep))}
           onDelete={() => remove(dream)}
           onOpenNotes={() => setNotesFor(dream._id)}
         />
@@ -191,11 +203,13 @@ export default function DreamGoals() {
 function DreamCard({
   dream,
   onSave,
+  onSaveAll,
   onDelete,
   onOpenNotes,
 }: {
   dream: Dream;
   onSave: (changes: Partial<Dream> & { achieved?: boolean }) => Promise<Dream>;
+  onSaveAll: SaveDream;
   onDelete: () => void;
   onOpenNotes: () => void;
 }) {
@@ -208,8 +222,8 @@ function DreamCard({
       <DreamEditor
         initial={dream}
         onCancel={() => setEditing(false)}
-        onSave={async (fields) => {
-          await onSave(fields);
+        onSave={async (fields, photos, onStep) => {
+          await onSaveAll(fields, photos, onStep);
           setEditing(false);
         }}
       />
@@ -235,9 +249,7 @@ function DreamCard({
 
   return (
     <article className="group surface overflow-hidden">
-      {dream.image && (
-        <img src={dream.image} alt="" className="block w-full max-h-[320px] object-cover" loading="lazy" />
-      )}
+      <PhotoGallery ids={dream.images || []} />
       <div className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-display text-xl leading-tight font-medium text-slate-900 dark:text-slate-50 [overflow-wrap:anywhere]">{dream.title}</h3>
@@ -283,33 +295,22 @@ function DreamCard({
   );
 }
 
+type SaveDream = (fields: DreamFields, photos: EditablePhoto[], onStep: (text: string) => void) => Promise<void>;
+
 function DreamEditor({
   initial,
   onSave,
   onCancel,
 }: {
   initial?: Dream;
-  onSave: (fields: { title: string; content: string; image: string }) => Promise<void>;
+  onSave: SaveDream;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState(initial?.title || '');
   const [content, setContent] = useState(initial?.content || '');
-  const [image, setImage] = useState(initial?.image || '');
+  const [photos, setPhotos] = useState<EditablePhoto[]>(() => (initial?.images || []).map((id) => ({ key: id, id })));
   const [busy, setBusy] = useState(false);
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const pickPhoto = async (file?: File) => {
-    if (!file) return;
-    setPhotoBusy(true);
-    try {
-      setImage(await compressImage(file));
-    } catch (err: any) {
-      toast.error(err?.message || 'Could not use that photo');
-    } finally {
-      setPhotoBusy(false);
-    }
-  };
+  const [step, setStep] = useState('');
 
   const submit = async () => {
     if (!title.trim()) {
@@ -318,39 +319,19 @@ function DreamEditor({
     }
     setBusy(true);
     try {
-      await onSave({ title: title.trim(), content, image });
+      await onSave({ title: title.trim(), content }, photos, setStep);
     } catch (err: any) {
       toast.error(err?.message || 'Could not save the goal');
     } finally {
       setBusy(false);
+      setStep('');
     }
   };
 
   return (
     <article className="surface overflow-hidden ring-2 ring-clay-500/30">
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => pickPhoto(e.target.files?.[0])} />
-      {image ? (
-        <div className="relative">
-          <img src={image} alt="" className="block w-full max-h-[320px] object-cover" />
-          <div className="absolute right-2 top-2 flex gap-1.5">
-            <Button size="sm" variant="outline" className="h-7 text-xs bg-white/90 dark:bg-slate-900/90" onClick={() => fileRef.current?.click()}>
-              <ImagePlus className="h-3.5 w-3.5 mr-1" /> Change
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 w-7 p-0 bg-white/90 dark:bg-slate-900/90" onClick={() => setImage('')} aria-label="Remove photo">
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="flex h-40 w-full flex-col items-center justify-center gap-1.5 bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 hover:text-clay-700 dark:hover:text-clay-300 transition-colors"
-        >
-          {photoBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5" />}
-          <span className="text-xs font-medium">{photoBusy ? 'Preparing photo' : 'Add a photo'}</span>
-        </button>
-      )}
+      <PhotoManager photos={photos} onChange={setPhotos} />
+
 
       <div className="p-4 sm:p-5 space-y-3">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Goal title" aria-label="Goal title" className="h-10 font-display text-lg" maxLength={200} autoFocus={!initial} />
@@ -366,9 +347,9 @@ function DreamEditor({
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onCancel} disabled={busy}>Cancel</Button>
-          <Button size="sm" className="h-8 text-xs" onClick={submit} disabled={busy || photoBusy}>
+          <Button size="sm" className="h-8 text-xs" onClick={submit} disabled={busy}>
             {busy && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-            Save goal
+            {step || 'Save goal'}
           </Button>
         </div>
       </div>

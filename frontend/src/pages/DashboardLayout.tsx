@@ -93,7 +93,7 @@ export default function DashboardLayout() {
         <header className="flex h-[72px] items-center justify-between px-4 sm:px-8 border-b border-slate-900/[0.06] dark:border-white/[0.06]">
           <div className="min-w-0">
             <h1 className="font-display text-[26px] leading-tight font-medium text-slate-900 dark:text-slate-50">Upcoming Plans</h1>
-            <p className="text-[13px] text-slate-500 dark:text-slate-400 hidden sm:block">Finish what you planned to get the app back</p>
+            <p className="text-[13px] text-slate-500 dark:text-slate-400 hidden sm:block">Start or finish what you planned to get the app back</p>
           </div>
           <div className="flex items-center gap-1">
             <button onClick={toggleDark} aria-label={isDark ? 'Switch to light appearance' : 'Switch to dark appearance'} className="p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-900/[0.05] dark:hover:bg-white/[0.06]">

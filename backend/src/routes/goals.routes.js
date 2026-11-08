@@ -19,7 +19,10 @@ import {
   listPlans,
   createPlan,
   updatePlan,
-  deletePlan
+  deletePlan,
+  getDreamImage,
+  addDreamImage,
+  deleteDreamImage
 } from '../controllers/goals.controller.js';
 
 const router = express.Router();
@@ -44,6 +47,9 @@ router.post('/plans', createPlan);
 router.put('/plans/:id', updatePlan);
 router.delete('/plans/:id', deletePlan);
 
+router.get('/dreams/images/:imageId', getDreamImage);
+router.post('/dreams/:id/images', addDreamImage);
+router.delete('/dreams/:id/images/:imageId', deleteDreamImage);
 router.get('/dreams', listDreams);
 router.post('/dreams', createDream);
 router.put('/dreams/:id', updateDream);

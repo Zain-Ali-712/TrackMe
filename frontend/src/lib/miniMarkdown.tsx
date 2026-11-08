@@ -22,7 +22,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
     if (match[2] !== undefined) nodes.push(<strong key={`${keyPrefix}-b${i++}`} className="font-semibold text-slate-900 dark:text-slate-50">{match[2]}</strong>);
     else if (match[3] !== undefined)
       nodes.push(
-        <mark key={`${keyPrefix}-h${i++}`} className="rounded-[3px] bg-amber-200/80 px-0.5 text-slate-900 dark:bg-amber-400/30 dark:text-amber-50">
+        <mark key={`${keyPrefix}-h${i++}`} className="hl">
           {match[3]}
         </mark>
       );

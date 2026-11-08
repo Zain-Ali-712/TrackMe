@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlarmClock, AlertTriangle, ChevronRight, Clock } from 'lucide-react';
+import { AlarmClock, AlertTriangle, ChevronRight, Clock, Play } from 'lucide-react';
 import { fetchPlans } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { PLANS_CHANGED_EVENT, deadlineLabel, relative, type Plan } from '@/components/goals/UpcomingPlans';
+import { PLANS_CHANGED_EVENT, deadlineLabel, relative, nextMoment, planStatus, type Plan } from '@/components/goals/UpcomingPlans';
 
 const URGENT_MS = 3 * 3600000; // under 3 hours left: red warning
 const SOON_MS = 24 * 3600000; // under a day left: amber
@@ -28,8 +28,9 @@ export default function UpcomingPlansCard() {
     };
   }, []);
 
-  const upcoming = (plans || []).slice().sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
-  const urgentCount = upcoming.filter((p) => new Date(p.deadline).getTime() - now < URGENT_MS).length;
+  const timeOf = (p: Plan) => new Date(nextMoment(p) || 0).getTime();
+  const upcoming = (plans || []).slice().sort((a, b) => timeOf(a) - timeOf(b));
+  const urgentCount = upcoming.filter((p) => timeOf(p) - now < URGENT_MS).length;
 
   const openPlansTab = () => {
     try {
@@ -44,7 +45,7 @@ export default function UpcomingPlansCard() {
       <div className="flex items-center justify-between px-5 sm:px-6 pt-5 pb-4">
         <div>
           <h3 className="font-display text-xl font-medium text-slate-900 dark:text-slate-50">Upcoming plans</h3>
-          <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">Next deadlines you set yourself</p>
+          <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">Next starts and end times you set</p>
         </div>
         <span
           className={cn(
@@ -74,9 +75,20 @@ export default function UpcomingPlansCard() {
         ) : (
           <ul className="divide-y divide-slate-200/60 dark:divide-slate-800">
             {upcoming.slice(0, MAX_SHOWN).map((plan) => {
-              const left = new Date(plan.deadline).getTime() - now;
+              const left = timeOf(plan) - now;
               const urgent = left < URGENT_MS;
               const soon = !urgent && left < SOON_MS;
+              const status = planStatus(plan, now);
+              const when =
+                status === 'not_started'
+                  ? 'Start it now!'
+                  : status === 'overdue'
+                    ? 'Overdue'
+                    : status === 'scheduled'
+                      ? `Starts in ${relative(left)}${urgent ? '!' : ''}`
+                      : plan.deadline
+                        ? `Ongoing · ends in ${relative(left)}${urgent ? '!' : ''}`
+                        : 'Ongoing · end time not set';
               return (
                 <li
                   key={plan._id}
@@ -92,7 +104,7 @@ export default function UpcomingPlansCard() {
                           : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                     )}
                   >
-                    {urgent ? <AlertTriangle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                    {urgent ? <AlertTriangle className="h-4 w-4" /> : status === 'ongoing' ? <Play className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className={cn('text-[13px] font-semibold truncate', urgent ? 'text-rose-800 dark:text-rose-200' : 'text-slate-900 dark:text-slate-50')}>
@@ -104,7 +116,8 @@ export default function UpcomingPlansCard() {
                         urgent ? 'text-rose-600 dark:text-rose-400 font-medium' : soon ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'
                       )}
                     >
-                      {left <= 0 ? 'Overdue' : urgent ? `Due in ${relative(left)}!` : `In ${relative(left)}`} · {deadlineLabel(plan.deadline)}
+                      {when}
+                      {nextMoment(plan) && ` · ${deadlineLabel(nextMoment(plan) as string)}`}
                     </p>
                   </div>
                 </li>

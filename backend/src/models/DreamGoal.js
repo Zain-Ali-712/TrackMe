@@ -4,7 +4,8 @@ import mongoose from 'mongoose';
 const dreamGoalSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 200 },
-    image: { type: String, default: '' }, // compressed data URL, resized in the browser
+    image: { type: String, default: '' }, // legacy single photo; moved into DreamImage on first load
+    images: [{ type: mongoose.Schema.Types.ObjectId, ref: 'DreamImage' }], // first one is the cover
     content: { type: String, default: '' }, // **bold**, *italic*, "- " bullets, "- [ ] " / "- [x] " checklist
     achievedAt: { type: Date },
     notes: { type: String, default: '' }, // serialized dated notes, same format as lead notes

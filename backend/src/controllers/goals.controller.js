@@ -1,6 +1,7 @@
 import DailyGoal, { GOAL_LOCATIONS } from '../models/DailyGoal.js';
 import MonthlyGoal from '../models/MonthlyGoal.js';
 import DreamGoal from '../models/DreamGoal.js';
+import DreamImage from '../models/DreamImage.js';
 import Achievement from '../models/Achievement.js';
 import MonthlyJournal from '../models/MonthlyJournal.js';
 import Plan from '../models/Plan.js';
@@ -230,20 +231,79 @@ function cleanDreamFields(body) {
   if (body.title !== undefined) fields.title = String(body.title).trim().slice(0, 200);
   if (body.content !== undefined) fields.content = String(body.content).slice(0, 20000);
   if (body.notes !== undefined) fields.notes = String(body.notes).slice(0, 100000);
-  if (body.image !== undefined) {
-    const image = String(body.image || '');
-    if (image && (!IMAGE_RE.test(image) || image.length > MAX_IMAGE_CHARS)) {
-      throw new Error('The photo must be a JPEG, PNG or WebP under 2 MB.');
-    }
-    fields.image = image;
-  }
   if (body.achieved !== undefined) fields.achievedAt = body.achieved ? new Date() : null;
   return fields;
 }
 
+const MAX_DREAM_IMAGES = 12;
+
+const checkImage = (value) => {
+  const image = String(value || '');
+  if (!IMAGE_RE.test(image) || image.length > MAX_IMAGE_CHARS) {
+    throw new Error('The photo must be a JPEG, PNG or WebP under 2 MB.');
+  }
+  return image;
+};
+
+/** Goals used to hold one inline photo; move any left over into their own documents, once per instance. */
+let dreamImagesMigrated = false;
+async function migrateDreamImages() {
+  if (dreamImagesMigrated) return;
+  const legacy = await DreamGoal.find({ image: { $nin: ['', null] } }).select('image images');
+  for (const dream of legacy) {
+    const img = await DreamImage.create({ dream: dream._id, data: dream.image });
+    dream.images = [img._id, ...(dream.images || [])];
+    dream.image = '';
+    await dream.save();
+  }
+  dreamImagesMigrated = true;
+}
+
 export const listDreams = async (req, res) => {
   try {
-    res.json(await DreamGoal.find().sort({ order: 1, createdAt: 1 }));
+    await migrateDreamImages();
+    // Photos are fetched one by one by id, so this list stays small however many there are.
+    res.json(await DreamGoal.find().select('-image').sort({ order: 1, createdAt: 1 }).lean());
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getDreamImage = async (req, res) => {
+  try {
+    const img = await DreamImage.findById(req.params.imageId).select('data').lean();
+    if (!img) return res.status(404).json({ message: 'Photo not found' });
+    // A photo never changes once saved (edits add a new one), so the browser can keep it.
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.json({ _id: img._id, data: img.data });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const addDreamImage = async (req, res) => {
+  try {
+    const dream = await DreamGoal.findById(req.params.id).select('images');
+    if (!dream) return res.status(404).json({ message: 'Goal not found' });
+    if ((dream.images || []).length >= MAX_DREAM_IMAGES) {
+      return res.status(400).json({ message: `A goal can have up to ${MAX_DREAM_IMAGES} photos.` });
+    }
+    const img = await DreamImage.create({ dream: dream._id, data: checkImage(req.body.image) });
+    dream.images.push(img._id);
+    await dream.save();
+    res.status(201).json({ _id: img._id, images: dream.images });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const deleteDreamImage = async (req, res) => {
+  try {
+    const dream = await DreamGoal.findById(req.params.id).select('images');
+    if (!dream) return res.status(404).json({ message: 'Goal not found' });
+    dream.images = dream.images.filter((id) => id.toString() !== req.params.imageId);
+    await Promise.all([dream.save(), DreamImage.deleteOne({ _id: req.params.imageId, dream: dream._id })]);
+    res.json({ images: dream.images });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -264,7 +324,18 @@ export const updateDream = async (req, res) => {
   try {
     const fields = cleanDreamFields(req.body);
     if (fields.title === '') delete fields.title;
-    const dream = await DreamGoal.findByIdAndUpdate(req.params.id, fields, { new: true });
+    if (Array.isArray(req.body.images)) {
+      // Reorder only (the first photo is the cover); adding and removing have their own routes.
+      const current = await DreamGoal.findById(req.params.id).select('images').lean();
+      if (!current) return res.status(404).json({ message: 'Goal not found' });
+      const have = new Set((current.images || []).map(String));
+      const next = req.body.images.map(String);
+      if (next.length !== have.size || !next.every((id) => have.has(id))) {
+        return res.status(400).json({ message: 'Photos changed in the meantime. Reload and try again.' });
+      }
+      fields.images = next;
+    }
+    const dream = await DreamGoal.findByIdAndUpdate(req.params.id, fields, { new: true }).select('-image').lean();
     if (!dream) return res.status(404).json({ message: 'Goal not found' });
     res.json(dream);
   } catch (error) {
@@ -274,7 +345,7 @@ export const updateDream = async (req, res) => {
 
 export const deleteDream = async (req, res) => {
   try {
-    await DreamGoal.findByIdAndDelete(req.params.id);
+    await Promise.all([DreamGoal.findByIdAndDelete(req.params.id), DreamImage.deleteMany({ dream: req.params.id })]);
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -349,10 +420,42 @@ export const saveMonthlyJournal = async (req, res) => {
 
 const PLAN_HISTORY_DAYS = 60;
 
+/**
+ * Why a plan holds the app hostage right now, or null:
+ *  - 'overdue'      its end time passed and it isn't done
+ *  - 'not_started'  its start time passed and it was never marked started
+ */
+export function planLockReason(plan, now = Date.now()) {
+  if (plan.done) return null;
+  if (plan.deadline && new Date(plan.deadline).getTime() <= now) return 'overdue';
+  if (!plan.startedAt && plan.startAt && new Date(plan.startAt).getTime() <= now) return 'not_started';
+  return null;
+}
+
+/**
+ * Plans used to have a single deadline. That date becomes the start time; open
+ * plans get an empty end time to fill in once, finished ones keep it as their end.
+ */
+let plansMigrated = false;
+async function migratePlans() {
+  if (plansMigrated) return;
+  await Plan.updateMany({ startAt: { $exists: false }, done: true }, [
+    { $set: { startAt: '$deadline', startedAt: { $ifNull: ['$startedAt', { $ifNull: ['$doneAt', '$deadline'] }] } } }
+  ]);
+  await Plan.updateMany({ startAt: { $exists: false }, done: { $ne: true } }, [{ $set: { startAt: '$deadline', deadline: null } }]);
+  plansMigrated = true;
+}
+
+const parseDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 export const listPlans = async (req, res) => {
   try {
+    await migratePlans();
     const since = new Date(Date.now() - PLAN_HISTORY_DAYS * 86400000);
-    const plans = await Plan.find({ $or: [{ done: false }, { doneAt: { $gte: since } }] }).sort({ deadline: 1 });
+    const plans = await Plan.find({ $or: [{ done: false }, { doneAt: { $gte: since } }] }).sort({ startAt: 1 }).lean();
     res.json(plans);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -361,12 +464,28 @@ export const listPlans = async (req, res) => {
 
 export const createPlan = async (req, res) => {
   try {
+    await migratePlans();
     const title = String(req.body.title || '').trim().slice(0, 200);
     if (!title) return res.status(400).json({ message: 'Give the plan a heading.' });
-    const deadline = new Date(req.body.deadline);
-    if (Number.isNaN(deadline.getTime())) return res.status(400).json({ message: 'Pick a deadline.' });
-    if (deadline.getTime() <= Date.now()) return res.status(400).json({ message: 'The deadline has to be in the future.' });
-    const plan = await Plan.create({ title, content: String(req.body.content || '').slice(0, 20000), deadline });
+    const now = new Date();
+    const startNow = Boolean(req.body.startNow);
+    const startAt = startNow ? now : parseDate(req.body.startAt);
+    const deadline = parseDate(req.body.deadline);
+    if (!startAt) return res.status(400).json({ message: 'Pick when you will start.' });
+    if (!deadline) return res.status(400).json({ message: 'Pick when it should be finished.' });
+    if (!startNow && startAt.getTime() <= now.getTime()) {
+      return res.status(400).json({ message: 'The start time has to be in the future, or choose "Starting now".' });
+    }
+    if (deadline.getTime() <= startAt.getTime() || deadline.getTime() <= now.getTime()) {
+      return res.status(400).json({ message: 'The end time has to be after the start time.' });
+    }
+    const plan = await Plan.create({
+      title,
+      content: String(req.body.content || '').slice(0, 20000),
+      startAt,
+      startedAt: startNow ? now : undefined,
+      deadline
+    });
     res.status(201).json(plan);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -375,16 +494,37 @@ export const createPlan = async (req, res) => {
 
 export const updatePlan = async (req, res) => {
   try {
+    await migratePlans();
     const plan = await Plan.findById(req.params.id);
     if (!plan) return res.status(404).json({ message: 'Plan not found' });
-    if (req.body.deadline !== undefined && new Date(req.body.deadline).getTime() !== plan.deadline.getTime()) {
-      return res.status(400).json({ message: "A plan's deadline can't be changed." });
+    const now = new Date();
+
+    if (req.body.startAt !== undefined && parseDate(req.body.startAt)?.getTime() !== plan.startAt?.getTime()) {
+      return res.status(400).json({ message: "A plan's start time can't be changed." });
+    }
+    if (req.body.deadline !== undefined) {
+      const deadline = parseDate(req.body.deadline);
+      if (plan.deadline) {
+        if (deadline?.getTime() !== plan.deadline.getTime()) {
+          return res.status(400).json({ message: "A plan's end time can't be changed." });
+        }
+      } else {
+        // Plans from before start/end times get their end time set once, here.
+        if (!deadline || deadline.getTime() <= now.getTime() || (plan.startAt && deadline.getTime() <= plan.startAt.getTime())) {
+          return res.status(400).json({ message: 'The end time has to be in the future and after the start.' });
+        }
+        plan.deadline = deadline;
+      }
     }
     if (req.body.title !== undefined) plan.title = String(req.body.title).trim().slice(0, 200) || plan.title;
     if (req.body.content !== undefined) plan.content = String(req.body.content).slice(0, 20000);
+    if (req.body.started !== undefined && !plan.done) {
+      plan.startedAt = req.body.started ? plan.startedAt || now : undefined;
+    }
     if (req.body.done !== undefined) {
       plan.done = Boolean(req.body.done);
-      plan.doneAt = plan.done ? new Date() : undefined;
+      plan.doneAt = plan.done ? now : undefined;
+      if (plan.done && !plan.startedAt) plan.startedAt = now;
     }
     await plan.save();
     res.json(plan);
@@ -393,13 +533,16 @@ export const updatePlan = async (req, res) => {
   }
 };
 
-/** Unfinished plans past their deadline can't be deleted; the only way out is marking them done. */
+/** A plan that is locking the app can't be deleted; start it or finish it instead. */
 export const deletePlan = async (req, res) => {
   try {
     const plan = await Plan.findById(req.params.id);
     if (!plan) return res.json({ message: 'Deleted' });
-    if (!plan.done && plan.deadline.getTime() <= Date.now()) {
-      return res.status(400).json({ message: 'This plan is overdue. Mark it done instead.' });
+    const reason = planLockReason(plan);
+    if (reason) {
+      return res.status(400).json({
+        message: reason === 'overdue' ? 'This plan is overdue. Mark it done instead.' : 'This plan should have started. Mark it started instead.'
+      });
     }
     await plan.deleteOne();
     res.json({ message: 'Deleted' });
