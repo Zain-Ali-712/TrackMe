@@ -57,9 +57,9 @@ async function persistDream(initial: Dream | undefined, fields: DreamFields, pho
   return ids.length || initial?.images?.length ? updateDream(dream._id, { images: ids }) : dream;
 }
 
-/** Columns for the masonry grid: 1 on phones, 2 on tablets, 3 on desktop. */
+/** Columns for the masonry grid: 1 on phones, 2 from tablets up, so cards stay large. */
 function useColumnCount() {
-  const get = () => (window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1);
+  const get = () => (window.innerWidth >= 768 ? 2 : 1);
   const [cols, setCols] = useState(get);
   useEffect(() => {
     const onResize = () => setCols(get());

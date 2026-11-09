@@ -60,50 +60,48 @@ export function DreamPhoto({ imageId, data, className }: { imageId?: string; dat
   return <img src={src} alt="" className={cn('object-cover', className)} loading="lazy" />;
 }
 
+/** Left / right buttons, counter and dots laid over a photo. */
+function SwapControls({ index, count, onChange }: { index: number; count: number; onChange: (index: number) => void }) {
+  if (count < 2) return null;
+  const go = (step: number) => onChange((index + step + count) % count);
+  const arrow =
+    'absolute top-1/2 -translate-y-1/2 grid h-10 w-10 place-items-center rounded-full bg-white/90 text-slate-900 shadow-md ring-1 ring-black/5 hover:bg-white hover:scale-105 active:scale-95 transition dark:bg-slate-900/90 dark:text-slate-50 dark:ring-white/10 dark:hover:bg-slate-900';
+  return (
+    <>
+      <button type="button" onClick={() => go(-1)} aria-label="Previous photo" className={cn(arrow, 'left-3')}>
+        <ChevronLeft className="h-5 w-5" />
+      </button>
+      <button type="button" onClick={() => go(1)} aria-label="Next photo" className={cn(arrow, 'right-3')}>
+        <ChevronRight className="h-5 w-5" />
+      </button>
+      <span className="absolute right-3 top-3 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium tabular-nums text-white backdrop-blur-sm">
+        {index + 1}/{count}
+      </span>
+      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 rounded-full bg-black/30 px-2 py-1 backdrop-blur-sm">
+        {Array.from({ length: count }, (_, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onChange(i)}
+            aria-label={`Show photo ${i + 1}`}
+            className={cn('h-1.5 rounded-full transition-all', i === index ? 'w-4 bg-white' : 'w-1.5 bg-white/60 hover:bg-white/90')}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
 /** The card's photo: the cover by default, with buttons to swap through the rest. */
 export function PhotoGallery({ ids }: { ids: string[] }) {
   const [index, setIndex] = useState(0);
   useEffect(() => setIndex(0), [ids.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   if (ids.length === 0) return null;
-  const go = (step: number) => setIndex((i) => (i + step + ids.length) % ids.length);
 
   return (
-    <div className="group/photo relative">
-      <DreamPhoto imageId={ids[index]} className="block w-full aspect-[16/10]" />
-      {ids.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={() => go(-1)}
-            aria-label="Previous photo"
-            className="absolute left-2 top-1/2 -translate-y-1/2 grid h-8 w-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 transition"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => go(1)}
-            aria-label="Next photo"
-            className="absolute right-2 top-1/2 -translate-y-1/2 grid h-8 w-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 transition"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-          <span className="absolute right-2 top-2 rounded-full bg-black/45 px-2 py-0.5 text-[10.5px] font-medium tabular-nums text-white backdrop-blur-sm">
-            {index + 1}/{ids.length}
-          </span>
-          <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
-            {ids.map((id, i) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setIndex(i)}
-                aria-label={`Show photo ${i + 1}`}
-                className={cn('h-1.5 rounded-full transition-all', i === index ? 'w-4 bg-white' : 'w-1.5 bg-white/60 hover:bg-white/90')}
-              />
-            ))}
-          </div>
-        </>
-      )}
+    <div className="relative">
+      <DreamPhoto imageId={ids[Math.min(index, ids.length - 1)]} className="block w-full aspect-[16/10]" />
+      <SwapControls index={Math.min(index, ids.length - 1)} count={ids.length} onChange={setIndex} />
     </div>
   );
 }
@@ -132,16 +130,34 @@ export function PhotoManager({ photos, onChange }: { photos: EditablePhoto[]; on
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  const [view, setView] = useState(0);
+  const shown = Math.min(view, Math.max(photos.length - 1, 0));
+
   const makeCover = (key: string) => {
     const photo = photos.find((p) => p.key === key)!;
     onChange([photo, ...photos.filter((p) => p.key !== key)]);
+    setView(0);
   };
 
   return (
     <div>
       <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => pick(e.target.files)} />
       {photos.length > 0 ? (
-        <DreamPhoto imageId={photos[0].id} data={photos[0].data} className="block w-full aspect-[16/10]" />
+        <div className="relative">
+          <DreamPhoto imageId={photos[shown].id} data={photos[shown].data} className="block w-full aspect-[16/10]" />
+          <SwapControls index={shown} count={photos.length} onChange={setView} />
+          {shown === 0 ? (
+            <span className="absolute left-3 top-3 rounded-full bg-clay-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow">Cover</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => makeCover(photos[shown].key)}
+              className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[11.5px] font-semibold text-slate-900 shadow-md hover:bg-white dark:bg-slate-900/90 dark:text-slate-50"
+            >
+              <Star className="h-3.5 w-3.5" /> Make cover
+            </button>
+          )}
+        </div>
       ) : (
         <button
           type="button"
@@ -156,8 +172,17 @@ export function PhotoManager({ photos, onChange }: { photos: EditablePhoto[]; on
       {photos.length > 0 && (
         <div className="flex gap-2 overflow-x-auto border-b border-slate-200/70 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-2.5">
           {photos.map((photo, i) => (
-            <div key={photo.key} className={cn('group/thumb relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2', i === 0 ? 'border-clay-500' : 'border-transparent')}>
-              <DreamPhoto imageId={photo.id} data={photo.data} className="h-full w-full" />
+            <div
+              key={photo.key}
+              className={cn(
+                'group/thumb relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2',
+                i === 0 ? 'border-clay-500' : 'border-transparent',
+                i === shown && 'ring-2 ring-slate-900/70 ring-offset-1 dark:ring-white/80 dark:ring-offset-slate-900'
+              )}
+            >
+              <button type="button" onClick={() => setView(i)} aria-label={`Show photo ${i + 1}`} className="block h-full w-full">
+                <DreamPhoto imageId={photo.id} data={photo.data} className="h-full w-full" />
+              </button>
               {i === 0 ? (
                 <span className="absolute left-1 top-1 rounded bg-clay-600 px-1 text-[9px] font-semibold uppercase tracking-wide text-white">Cover</span>
               ) : (
